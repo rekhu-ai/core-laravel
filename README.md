@@ -1,0 +1,153 @@
+# Rekhu Core for Laravel
+
+Rekhu's **knowers** in your Laravel app. A knower is a specialist that knows one part of a trade the way its best expert does: it understands what is asked, decides, explains in your user's language and learns from what your users accept or correct. The first two know print: **Seshat** knows print files, **Rekhu Machines** knows printing and finishing machines.
+
+You install Rekhu once and add the knowers your product needs. Your tenants, users, limits and prices stay yours: every call is kept in your own usage table, so you can charge your customers per call or per plan.
+
+```bash
+composer require rekhu/core
+php artisan rekhu:core --install --tenancy=multi --locales=en,nl,ar
+php artisan migrate
+php artisan rekhu:core --install=seshat
+php artisan rekhu:core --install=machines
+```
+
+No Rekhu account yet? [Create one](https://rekhu.com/register?ref=core-laravel): it starts with $10 credit, no card needed.
+
+## Contents
+
+1. [Connecting](#connecting)
+2. [Tenants, languages, limits and your own prices](#tenants-languages-limits-and-your-own-prices)
+3. [Seshat: print files](#seshat-print-files)
+4. [Rekhu Machines](#rekhu-machines)
+5. [Usage per tenant](#usage-per-tenant)
+6. [Where Rekhu runs](#where-rekhu-runs)
+7. [Errors](#errors)
+
+## Connecting
+
+`php artisan rekhu:core --install` asks for the app key (Rekhu account → Projects → your app → Connection → Add key), checks it with Rekhu and writes the settings to `.env`:
+
+| Setting | |
+|---|---|
+| `REKHU_APP_KEY` | the app key; an app with Rekhu Assistant can use its `REKHU_ASSISTANT_KEY` |
+| `REKHU_TENANCY` | `single` (the app is one customer) or `multi` (every user belongs to one of your customers) |
+| `REKHU_LOCALES` | the languages your users read |
+| `REKHU_KNOWERS` | the knowers this app uses; `rekhu:core --install=machines` adds one after checking Rekhu has it |
+| `REKHU_DEPLOYMENT`, `REKHU_PLATFORM` | where Rekhu runs, see below |
+
+## Tenants, languages, limits and your own prices
+
+In a service provider:
+
+```php
+use Rekhu\Core\Rekhu;
+
+Rekhu::tenantUsing(fn ($user) => $user->team);                     // a model, ['id' => …, 'name' => …] or an id
+Rekhu::localeUsing(fn ($user) => $user->language);                 // else the app's locale
+Rekhu::limitsUsing(fn ($tenant, $knower) => $tenant['plan'] ?? null === 'basic' ? ['per_day_per_tenant' => 50] : []);
+Rekhu::priceUsing(fn ($tenant, $knower, $action, $meta) => 0.02);  // what you charge your customer for a call
+```
+
+- **Limits** a day per tenant and per user, from `limits.<knower>` in `config/rekhu.php` with your resolver on top. A call over a limit is refused with `LimitReached` before anything is sent.
+- **Your price** is kept with each call next to what Rekhu charged you, so your margin shows per customer.
+- **`Rekhu\Core\Events\KnowerUsed`** fires after every call with the tenant, user, knower, action, Rekhu's cost and your price: charge a plan's credit there.
+
+A queued job without a signed-in user names the tenant: `Rekhu::machines()->forTenant('shop-42', 'Print shop 42')->…`.
+
+## Seshat: print files
+
+Seshat checks a print file **against the order it is for**, not against fixed rules. Each finding comes with Seshat's decision: `fix` (Seshat repairs it), `ask` (the customer chooses), `refuse` (it cannot be printed as it is) or `note`.
+
+```php
+$order = ['width_mm' => 148, 'height_mm' => 210, 'bleed_mm' => 3, 'pages' => 2, 'colour' => 'cmyk'];
+
+$check = Rekhu::seshat()->for($user)->check($request->file('artwork'), $order, explain: true);
+// status ok | warning | error, file (pages, sizes, colours, fonts, images), findings, file_id
+// explanation: a summary, a text per finding and a question for each "ask", in the user's language
+
+$fixed = Rekhu::seshat()->fix($check['file_id'], 'auto', $order);          // every fix Seshat decided on
+$fixed = Rekhu::seshat()->fix($check['file_id'], [['fix' => 'scale_to_size', 'option' => 'fit'], ['fix' => 'add_bleed']], $order);
+Storage::put('print/'.$fixed['name'], Rekhu::seshat()->download($fixed['file_id']));
+
+$proof = Rekhu::seshat()->preview($fixed['file_id']);                       // a PNG with trim, bleed and safe zone
+```
+
+| It checks | It fixes |
+|---|---|
+| Size against the order (also A4 artwork for A5, or a different shape), trim and bleed boxes | `set_trim_box`, `add_bleed` (mirrored edges), `scale_to_size` (scale, fit, fill) |
+| Resolution of every picture as placed, RGB and spot colours, total ink | `convert_cmyk` |
+| Fonts not embedded | `embed_fonts` |
+| Pages against the order, text too small, lines too thin, white set to overprint, transparency, text near the trim | (asked or noted) |
+| Pictures (JPG, PNG, TIFF) at the ordered size, EPS, zips of files, locked files | `picture_to_pdf` |
+
+The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_text_pt` (6), `spot_colours_allowed`. Rekhu keeps a file for a day, so a fix or a preview can follow a check without sending it again. Findings are codes with values: show the explanation, or your own text per code.
+
+## Rekhu Machines
+
+Machines are sent as a **Rekhu machine profile**. Map your own machine records to it:
+
+| Field | |
+|---|---|
+| `type` | printing, cutting, folding, binding, lamination, die_cutting |
+| `method` | offset, digital_toner, digital_liquid, inkjet_sheet, large_format, guillotine |
+| `maker`, `model` | as on the machine |
+| `sheet_max_mm`, `sheet_min_mm` | `[width, height]` |
+| `gsm` | `[min, max]` paper weights |
+| `colour_units`, `perfecting` | units (offset), perfecting yes / no / option |
+| `speed`, `speed_unit` | sheets/h (offset, inkjet), A4 pages/min (digital), m²/h (large format) |
+| `makeready_minutes`, `makeready_waste_sheets`, `running_waste_percent` | |
+| `gripper_mm`, `margins_mm` | `{top, right, bottom, left}` |
+
+```php
+$machines = Rekhu::machines()->for($user);
+
+$found = $machines->identify('Heidelberg Speedmaster SM 74-4 with coater, 2009');
+// match: heidelberg-sm-74 (sure), details: 4 units, coater, 2009; questions when it could be another model
+
+$profile = $machines->profile($found['match']['id'], ['colour_units' => 4]);
+// every value with its source: given, library, typical (with the usual range)
+
+$check = $machines->check($machineAsProfile, 'heidelberg-sm-74', explain: true);
+// findings: speed_above_model, sheet_above_model, gsm_outside_model, waste_unusual, missing_for_price, …
+// with explain: a summary and a text per finding in the user's language
+
+$choice = $machines->choose(
+    ['width_mm' => 85, 'height_mm' => 55, 'quantity' => 5000, 'colours_front' => 4, 'colours_back' => 4, 'gsm' => 350],
+    [['ref' => 12, 'name' => 'SM 74-4', 'method' => 'offset', 'sheet_max_mm' => [530, 740], 'speed' => 15000, 'hourly_rate' => 140], …],
+);
+// the machines that can do it, cheapest (with hourly rates) or fastest first, each with why; the others with why not
+
+$machines->explain('Can I print 400 g/m² board on it, and what slows it down?', $machineAsProfile, 'heidelberg-sm-74');
+$machines->models();   // the library's models, for a picker (not charged)
+```
+
+Every answer has a `ref`. Tell Rekhu what your user did with it, so the knower learns:
+
+```php
+$machines->feedback($check['ref'], 'corrected', ['speed' => 12000]);   // accepted, corrected or rejected
+```
+
+Findings are codes with values: show Rekhu's message, or your own text per code in your own language.
+
+## Usage per tenant
+
+```bash
+php artisan rekhu:core --usage --month=2026-11
+php artisan rekhu:core --usage --month=2026-11 --tenant=shop-42 --csv=storage/rekhu-2026-11.csv
+```
+
+Calls, model calls, what Rekhu charged and your own price, per tenant, knower and action. The rows are in `rekhu_usage` for your own reports.
+
+## Where Rekhu runs
+
+| `REKHU_DEPLOYMENT` | |
+|---|---|
+| `cloud` | Rekhu's platform (the default) |
+| `private` | Rekhu inside your own network: `php artisan rekhu:core --install --deployment=private --platform=https://rekhu.intranet.example.com` |
+
+The knowers, their answers and this package are the same in every deployment.
+
+## Errors
+
+`Rekhu\Core\Exceptions\RekhuException` with `status` and `type` (Rekhu's refusal, for example a job without a size: 422), and `LimitReached` (429, `scope` tenant or user) for your own limits.
