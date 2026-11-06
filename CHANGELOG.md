@@ -2,6 +2,10 @@
 
 All notable changes to `rekhu/core`. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.1 · 6 November 2026
+
+- Installs next to Guzzle 8 as well as 7, as Laravel 13 allows.
+
 ## 0.1.0 · 5 November 2026
 
 - **Rekhu Core for Laravel.** One package to install Rekhu's knowers: `php artisan rekhu:core --install` connects the app (key, single or multi-tenant, languages, cloud or private), `php artisan rekhu:core --install=machines` adds a knower.
