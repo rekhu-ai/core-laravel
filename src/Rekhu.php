@@ -24,7 +24,7 @@ use Rekhu\Core\Knowers\Seshat;
  */
 class Rekhu
 {
-    public const VERSION = '0.1.1';
+    public const VERSION = '0.2.0';
 
     private static ?Closure $tenant = null;
 
@@ -130,6 +130,22 @@ class Rekhu
         $price = self::$price ? (self::$price)($tenant, $knower, $action, $meta) : null;
 
         return $price === null ? null : (float) $price;
+    }
+
+    /**
+     * Whether a webhook Rekhu sent is genuine: the X-Rekhu-Signature header (t=…,v1=…) over the raw body, with the
+     * webhook_secret the call answered, and not older than $tolerance seconds.
+     */
+    public static function verifyWebhook(string $body, ?string $signature, string $secret, int $tolerance = 300): bool
+    {
+        if (! $signature || ! preg_match('/^t=(\d+),v1=([a-f0-9]{64})$/', $signature, $m)) {
+            return false;
+        }
+        if (abs(time() - (int) $m[1]) > $tolerance) {
+            return false;
+        }
+
+        return hash_equals(hash_hmac('sha256', $m[1].'.'.$body, $secret), $m[2]);
     }
 
     public static function installed(string $knower): bool

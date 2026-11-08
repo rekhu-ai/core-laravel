@@ -2,6 +2,16 @@
 
 All notable changes to `rekhu/core`. Versions follow [semantic versioning](https://semver.org).
 
+## 0.2.0 · 6 November 2026
+
+- **Seshat in modules.** `Rekhu::seshat()->modules()` says which modules this application may use: `preflight` (check, fix, preview) and `ai_enhance`. Rekhu switches them on per application; a call to a module that is off is refused with `module_not_enabled`.
+- **ai_enhance:** `enhance($picture, $modes, $options)` improves one picture without a check:
+  - the modes are upscale to a print size, extend, denoise, sharpen, restore, remove_background, replace_background, remove_object, vectorize and colour_correct;
+  - it answers `file_id`, format, size, ppi, confidence and warnings;
+  - a large picture runs as a job: `poll($jobId)`, or a webhook checked with `Rekhu::verifyWebhook()`;
+  - `enhancePreview($fileId)` gives a before / after picture, and `upload()` keeps a mask or background picture.
+- The usage of every call says what it cost per module and mode (`meta.usage`).
+
 ## 0.1.1 · 6 November 2026
 
 - Installs next to Guzzle 8 as well as 7, as Laravel 13 allows.

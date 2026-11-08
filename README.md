@@ -18,7 +18,7 @@ No Rekhu account yet? [Create one](https://rekhu.com/register?ref=core-laravel):
 
 1. [Connecting](#connecting)
 2. [Tenants, languages, limits and your own prices](#tenants-languages-limits-and-your-own-prices)
-3. [Seshat: print files](#seshat-print-files)
+3. [Seshat: print files](#seshat-print-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
 4. [Rekhu Machines](#rekhu-machines)
 5. [Usage per tenant](#usage-per-tenant)
 6. [Where Rekhu runs](#where-rekhu-runs)
@@ -82,6 +82,50 @@ $proof = Rekhu::seshat()->preview($fixed['file_id']);                       // a
 | Pictures (JPG, PNG, TIFF) at the ordered size, EPS, zips of files, locked files | `picture_to_pdf` |
 
 The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_text_pt` (6), `spot_colours_allowed`. Rekhu keeps a file for a day, so a fix or a preview can follow a check without sending it again. Findings are codes with values: show the explanation, or your own text per code.
+
+## Seshat AI: one picture improved (ai_enhance)
+
+For a platform with its own preflight that only wants Seshat's image work, or next to the preflight. The module is switched on per application by Rekhu; `modules()` tells which ones this key may use.
+
+| Mode | What it does | Options |
+|---|---|---|
+| `upscale` | More pixels, up to 4×: to a resolution at a print size | `ppi`, `width_mm`, `height_mm`, or `factor` |
+| `extend` | Grows the picture beyond its edges (bleed); a little per side on CPU | `all_mm`, or `top_mm` `right_mm` `bottom_mm` `left_mm` (or `_px`) |
+| `denoise`, `sharpen` | Cleans JPEG artefacts and noise; crisper edges | `strength`, `amount` |
+| `restore` | An old or scanned photo: scratches filled, noise and faded colour corrected | |
+| `remove_background` | Transparent PNG, or a solid colour | `background: '#ffffff'` |
+| `replace_background` | A new background from a picture you send | `background_file_id` (from `upload`) |
+| `remove_object` | Fills an object or blemish from its surroundings | `region: {x, y, w, h}`, or `mask_file_id` |
+| `vectorize` | A logo or line drawing as SVG. A photo is refused (`not_vectorizable`) | |
+| `colour_correct` | Exposure and white balance | |
+
+Every answer says what it invented in `warnings` (an edge, a filled area, a reconstructed detail), with a `confidence` from 0 to 1. RGB stays RGB, and CMYK stays CMYK unless the mode needs otherwise. Files are kept a day and never used for training. A large picture runs as a job: poll it, or give a webhook URL. The webhook is signed `x-rekhu-signature: t=…,v1=…` with the `webhook_secret` the call answered. Each mode is priced on its own, and `meta.usage` says per item what it cost.
+
+Limits:
+- at most 40 megapixels in and 120 megapixels out;
+- upscaling at most 4×;
+- extending at most 12 % of a side on CPU;
+- removing at most a quarter of the picture.
+
+```php
+// a key with only ai_enhance
+Rekhu::seshat()->modules();          // ['modules' => ['preflight' => false, 'ai_enhance' => true], 'modes' => [...]]
+
+$r = Rekhu::seshat()->forTenant($tenant->uuid, $tenant->name)
+    ->enhance($request->file('photo'), ['denoise', 'upscale'], ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70], ['webhook_url' => route('rekhu.webhook')]);
+// ['file_id' => 'f_…', 'format' => 'png', 'width_px' => 1182, 'height_px' => 788, 'ppi' => 300, 'confidence' => 0.8,
+//  'warnings' => [], 'meta' => ['usage' => [['module' => 'ai_enhance', 'item' => 'seshat_upscale', 'units' => 1, 'cost_usd' => …]]]]
+// or, for a large picture: ['status' => 'queued', 'job_id' => 'j_…', 'webhook_secret' => 'whsec_…']
+
+$preview = Rekhu::seshat()->enhancePreview($r['file_id']);          // ['image' => 'data:image/png;base64,…'] before | after
+Storage::put('print/photo.png', Rekhu::seshat()->download($r['file_id']));
+Rekhu::seshat()->poll('j_…');                                       // queued | running | done with result | failed with error
+
+// in your webhook controller
+abort_unless(Rekhu::verifyWebhook($request->getContent(), $request->header('x-rekhu-signature'), $storedSecret), 401);
+```
+
+**Inside the full Seshat:** with `ai_enhance` on, a picture below the order's resolution gets the fix `upscale_ai` in its finding. `fix($fileId, [['fix' => 'upscale_ai']], $order)` upscales the pictures inside the PDF, in place.
 
 ## Rekhu Machines
 

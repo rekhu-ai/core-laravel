@@ -33,8 +33,8 @@ class Client
         }
         $user ??= auth()->user();
         $tenant ??= Rekhu::tenant($user);
-        // the library's list is the same for everyone and not charged: it needs no tenant
-        if (config('rekhu.tenancy') === 'multi' && ! $tenant && $action !== 'models') {
+        // what is not charged (the library's list, the modules) needs no tenant
+        if (config('rekhu.tenancy') === 'multi' && ! $tenant && ! in_array($action, ['models', 'modules'], true)) {
             throw new RekhuException('This app is multi-tenant, and no tenant was found for the user: set Rekhu::tenantUsing() or pass a tenant.', 0, 'configuration_error');
         }
         $this->checkLimits($tenant, $user, $knower);
@@ -59,7 +59,7 @@ class Client
             throw new RekhuException((string) ($response->json('error.message') ?: "Rekhu answered {$response->status()}"), $response->status(), (string) ($response->json('error.type') ?: 'api_error'));
         }
         $answer = (array) $response->json();
-        if ($action === 'models') {
+        if (in_array($action, ['models', 'modules', 'upload', 'poll', 'enhance_preview'], true)) {
             return $answer;
         }
         $this->keep($tenant, $user, $knower, $action, $answer, (int) round((microtime(true) - $started) * 1000));

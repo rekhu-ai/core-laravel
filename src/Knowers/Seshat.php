@@ -18,6 +18,11 @@ use Rekhu\Core\Exceptions\RekhuException;
  *
  * The order: width_mm, height_mm (the finished size), bleed_mm (3), pages, colour (cmyk), min_ppi (250), safe_mm (3),
  * max_ink (320), spot_colours_allowed. Files are kept by Rekhu for a day, so a fix or a preview can follow a check.
+ *
+ * With the ai_enhance module (switched on per application by Rekhu), one picture is improved without a check:
+ *
+ *     $result = Rekhu::seshat()->enhance($request->file('photo'), ['denoise', 'upscale'], ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70]);
+ *     $result['status'] === 'queued' ? $job = $result['job_id'] : Storage::put('print/photo.png', Rekhu::seshat()->download($result['file_id']));
  */
 class Seshat extends Knower
 {
@@ -49,6 +54,48 @@ class Seshat extends Knower
     public function preview(string $fileId, int $page = 1, int $longest = 1200): array
     {
         return $this->call('preview', ['file_id' => $fileId, 'page' => $page, 'longest' => $longest]);
+    }
+
+    /** Which modules this application may use (preflight, ai_enhance) and the modes: show only what may be used. Not charged. */
+    public function modules(): array
+    {
+        return $this->call('modules');
+    }
+
+    /** A file kept by Rekhu for a day (a mask, a background picture, a picture to enhance later): its file_id. Not charged. */
+    public function upload(UploadedFile|string $file, ?string $name = null): array
+    {
+        return $this->call('upload', [], $this->file($file, $name));
+    }
+
+    /**
+     * ai_enhance: one picture (an upload, a path, bytes with a name, or a file_id from upload) through the modes, in order:
+     * upscale, extend, denoise, sharpen, restore, remove_background, replace_background, remove_object, vectorize,
+     * colour_correct. options: ppi, width_mm, height_mm (upscale to a print size), factor, all_mm / top_mm… (extend),
+     * background ('#hex'), region {x, y, w, h}; mask_file_id and background_file_id from upload(). A large picture, or
+     * async: true, answers ['status' => 'queued', 'job_id' => …]: poll() it, or give webhook_url (signed, see
+     * Rekhu::verifyWebhook). Charged per mode, only when it worked.
+     */
+    public function enhance(UploadedFile|string $picture, array|string $modes, array $options = [], array $extra = []): array
+    {
+        $input = ['mode' => (array) $modes, 'options' => (object) $options] + array_intersect_key($extra, array_flip(['async', 'webhook_url', 'mask_file_id', 'background_file_id']));
+        if (is_string($picture) && preg_match('/^f_[a-z0-9]{24}$/', $picture)) {
+            return $this->call('enhance', $input + ['file_id' => $picture]);
+        }
+
+        return $this->call('enhance', $input, $this->file($picture, $extra['name'] ?? null));
+    }
+
+    /** A small before / after picture of an enhanced file, as a data: URL: what the customer sees before taking it. */
+    public function enhancePreview(string $fileId, int $longest = 900): array
+    {
+        return $this->call('enhance_preview', ['file_id' => $fileId, 'longest' => $longest]);
+    }
+
+    /** A job (enhance on a large picture): queued, running, done with its result, or failed with why. */
+    public function poll(string $jobId): array
+    {
+        return $this->call('poll', ['job_id' => $jobId]);
     }
 
     /** The bytes of a file Seshat made (the fixed PDF). */

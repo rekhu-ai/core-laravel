@@ -50,4 +50,40 @@ final class SeshatTest extends TestCase
         $this->expectExceptionMessage("file's name");
         Rekhu::seshat()->check("%PDF-1.7\n".str_repeat('x', 5000));
     }
+
+    public function test_ai_only_enhance_preview_poll_and_modules(): void
+    {
+        Http::fake([
+            'rekhu.test/v1/knowers/seshat/modules' => Http::response(['modules' => ['preflight' => false, 'ai_enhance' => true], 'modes' => ['upscale']]),
+            'rekhu.test/v1/knowers/seshat/enhance' => Http::response($this->answer(['file_id' => 'f_'.str_repeat('b', 24), 'format' => 'png', 'width_px' => 1182, 'confidence' => 0.8, 'warnings' => []] + ['meta' => ['model_calls' => 0, 'cost_usd' => 0.04, 'usage' => [['module' => 'ai_enhance', 'item' => 'seshat_upscale', 'units' => 1, 'cost_usd' => 0.04]]]])),
+            'rekhu.test/v1/knowers/seshat/enhance_preview' => Http::response(['image' => 'data:image/png;base64,iVBOR']),
+            'rekhu.test/v1/knowers/seshat/poll' => Http::response(['job_id' => 'j_1', 'status' => 'done', 'result' => ['file_id' => 'f_x']]),
+        ]);
+        $this->assertTrue(Rekhu::seshat()->modules()['modules']['ai_enhance']);
+        $photo = UploadedFile::fake()->createWithContent('photo.png', "\x89PNG fake");
+        $result = Rekhu::seshat()->for($this->user())->enhance($photo, ['denoise', 'upscale'], ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70], ['webhook_url' => 'https://shop.test/hooks/rekhu']);
+        $this->assertSame(1182, $result['width_px']);
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/enhance') && $r->body() === "\x89PNG fake"
+            && json_decode($r->header('x-knower-input')[0], true) === ['mode' => ['denoise', 'upscale'], 'options' => ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70], 'webhook_url' => 'https://shop.test/hooks/rekhu']);
+        // a kept file goes by its id, as JSON
+        Rekhu::seshat()->enhance('f_'.str_repeat('a', 24), 'remove_background');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/enhance') && (json_decode($r->body(), true)['file_id'] ?? null) === 'f_'.str_repeat('a', 24) && (json_decode($r->body(), true)['mode'] ?? null) === ['remove_background']);
+        $this->assertStringStartsWith('data:image/png', Rekhu::seshat()->enhancePreview($result['file_id'])['image']);
+        $this->assertSame('done', Rekhu::seshat()->poll('j_1')['status']);
+        // the AI call is in the ledger with its cost; previews and polls are not charged and not kept
+        $this->assertSame(['enhance', 'enhance'], DB::table('rekhu_usage')->pluck('action')->all());
+        $this->assertEqualsWithDelta(0.04, (float) DB::table('rekhu_usage')->value('cost_usd'), 1e-9);
+    }
+
+    public function test_a_webhook_is_verified_by_its_signature_and_age(): void
+    {
+        $body = '{"job_id":"j_1","status":"done"}';
+        $t = (string) time();
+        $header = 't='.$t.',v1='.hash_hmac('sha256', $t.'.'.$body, 'whsec_abc');
+        $this->assertTrue(Rekhu::verifyWebhook($body, $header, 'whsec_abc'));
+        $this->assertFalse(Rekhu::verifyWebhook($body.' ', $header, 'whsec_abc'), 'a changed body');
+        $this->assertFalse(Rekhu::verifyWebhook($body, $header, 'whsec_other'), 'another secret');
+        $old = (string) (time() - 3600);
+        $this->assertFalse(Rekhu::verifyWebhook($body, 't='.$old.',v1='.hash_hmac('sha256', $old.'.'.$body, 'whsec_abc'), 'whsec_abc'), 'too old');
+    }
 }
