@@ -77,13 +77,13 @@ $proof = Rekhu::seshat()->preview($fixed['file_id']);                       // a
 
 | It checks | It fixes |
 |---|---|
-| Size against the order (also A4 artwork for A5, or a different shape), trim and bleed boxes | `set_trim_box`, `add_bleed` (mirrored edges), `scale_to_size` (scale, fit, fill) |
+| Size against the order (also A4 artwork for A5, or a different shape), trim and bleed boxes | `set_trim_box`, `add_bleed` (mirrored edges), `scale_to_size` (scale, fit, fill: fill covers the order's bleed too; `from_mm` names the size it came from) |
 | Resolution of every picture as placed, RGB and spot colours, total ink | `convert_cmyk` |
 | Fonts not embedded | `embed_fonts` |
 | Pages against the order, text too small, lines too thin, white set to overprint, transparency, text near the trim | (asked or noted) |
 | Pictures (JPG, PNG, TIFF) at the ordered size, EPS, zips of files, locked files | `picture_to_pdf` |
 
-The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_text_pt` (6), `spot_colours_allowed`. Rekhu keeps a file for a day, so a fix or a preview can follow a check without sending it again. Findings are codes with values: show the explanation, or your own text per code.
+The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_text_pt` (6), `spot_colours_allowed`. An order key Seshat does not know is refused (`InvalidRequest`, with the nearest known key), so a misspelt one never passes unnoticed. Rekhu keeps a file for a day, so a fix or a preview can follow a check without sending it again. Findings are codes with values: show the explanation, or your own text per code.
 
 **Every code, decision and fix in one list.** `Rekhu::seshat()->codes()` (free) answers the versioned list to map your own tool's names against: each code with its levels, decisions, fix and options, and each fix with the options it takes.
 
