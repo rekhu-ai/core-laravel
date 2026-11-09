@@ -12,7 +12,7 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 - **Pages:** `merge($fileIds)`, `split($fileId, ['1-2', '3-end'])` and `render($fileId, 'jpg', 150)` (pages as pictures), each kept as files to download.
 - **New Seshat fixes**, all through `fix()`: `convert_profile` (FOGRA39, FOGRA51, FOGRA52, GRACoL 2013, SWOP 2013, newspaper; sets the output intent), `reduce_ink`, `pure_black_text`, `white_knockout`, `rename_spot`, `make_pdfx` (PDF/X-4 or X-1a, or what stops it), `pages` (reorder, remove, rotate, blank pages) and `add_marks` (crop and registration marks). Fix fields such as `limit`, `profile`, `order` and `rotate` pass through as given.
 - The order takes `profile`. White set to overprint is now fixed on its own (`white_knockout`); too much ink offers `reduce_ink`. Code list 1.5.
-- Docs by task: rekhu.ai/docs/seshat.
+- Docs by task: rekhu.com/docs/seshat.
 ## 0.5.0 · 9 November 2026
 
 - **Text and fonts in a print file.** Two Seshat fixes, each several times per call, in order, as one charge:

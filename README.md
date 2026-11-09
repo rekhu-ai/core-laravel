@@ -115,7 +115,7 @@ New text goes in the file's own font when it has the letters, else the same font
 
 **What it costs.** `meta.usage` has one line per charged item: the check (`seshat`) and, with `explain`, the explanation (`seshat_explain`, the model call). A refused call, or a fix with nothing to do, costs nothing.
 
-**Everything else, by task:** colour through a print profile, ink, black text, white overprint, spot colours, PDF/X, pages, merge, split, crop marks and pages as pictures are all on [rekhu.ai/docs/seshat](https://rekhu.ai/docs/seshat), each with what to send, what comes back and one call.
+**Everything else, by task:** colour through a print profile, ink, black text, white overprint, spot colours, PDF/X, pages, merge, split, crop marks and pages as pictures are all on [rekhu.com/docs/seshat](https://rekhu.com/docs/seshat), each with what to send, what comes back and one call.
 
 ## Seshat AI: one picture improved (ai_enhance)
 
