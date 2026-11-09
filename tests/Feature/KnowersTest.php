@@ -97,8 +97,8 @@ final class KnowersTest extends TestCase
         }
         $this->assertSame(0, DB::table('rekhu_usage')->count(), 'a refused call is not kept');
 
-        config(['rekhu.knowers' => []]);
-        $this->expectExceptionMessage('php artisan rekhu:core --install=machines');
+        config(['rekhu.knowers' => ['seshat']]);
+        $this->expectExceptionMessage('REKHU_KNOWERS');
         Rekhu::machines()->identify('SM 74');
     }
 

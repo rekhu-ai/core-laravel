@@ -3,6 +3,19 @@
 All notable changes to `rekhu/core`. Versions follow [semantic versioning](https://semver.org).
 
 
+
+## 0.3.0 · 9 November 2026
+
+- **Typed exceptions.** Every refusal has its own class under `RekhuException` (so existing catches keep working): `InvalidKey`, `ModuleNotEnabled`, `RegionUnavailable`, `CreditExhausted`, `AppPaused`, `FileNotFound`, `InvalidRequest`, `RateLimited`, `Unavailable`.
+- **Retries without double charges.** A dropped connection, 429, 502 or 503 is tried again up to three times. Charged calls carry an `Idempotency-Key`; Rekhu answers a repeated key with the first result (`meta.replayed`) and charges nothing.
+- **Large files streamed.** Uploads go from their path instead of being read into memory; `downloadTo($fileId, $path)` writes a result straight to disk.
+- **File names in any language** arrive whole (percent-encoded in the header and named in the input).
+- **Seshat:** `codes()` lists every finding code, decision and fix with its options, versioned; every `ask` finding carries structured `options`; an unknown fix or option is refused with an `InvalidRequest` and not charged; `applied` names side effects too, and `resolved` lists the codes the file no longer has; `remove($fileId)` deletes a kept file at once.
+- **`php artisan rekhu:core --check`** calls Rekhu with the key: the platform, its version, the account and the agent.
+- **No signed-in user in queued work:** the client no longer guesses the user from `auth()` in console and queue; name it with `for()` or `forTenant()`. `download()` and `feedback()` send the tenant and user too.
+- **`REKHU_KNOWERS` is optional:** empty means every knower the key allows.
+- A warning in the log when limits are set while the ledger is off (limits are counted in the ledger).
+- The timeout defaults to 180 seconds everywhere; Guzzle `^7.2` only; no account offer in error messages.
 ## 0.2.1 · 9 November 2026
 
 - **The ledger's migration only when the ledger is on.** With `REKHU_LEDGER=false` the package no longer adds the `rekhu_usage` table to the app's migrations.

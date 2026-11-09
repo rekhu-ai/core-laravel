@@ -75,4 +75,16 @@ final class CommandsTest extends TestCase
         $this->assertStringContainsString('shop-42,"Shop 42",machines,check,2,1,0.0080,0.10', file_get_contents(base_path($csv)));
         @unlink(base_path($csv));
     }
+
+    public function test_check_reaches_rekhu_with_the_key(): void
+    {
+        Http::fake(['rekhu.test/v1/me' => Http::response(['customer' => ['name' => 'Acme'], 'agent' => 'laravel-dev', 'key' => ['label' => 'Shop'], 'project' => ['name' => 'Shop']], 200, ['x-rekhu-version' => '0.1.0'])]);
+        $this->artisan('rekhu:core --check')->expectsOutputToContain('Rekhu answers with this key.')->assertSuccessful();
+    }
+
+    public function test_check_says_why_a_key_is_refused(): void
+    {
+        Http::fake(['rekhu.test/v1/me' => Http::response(['type' => 'error', 'error' => ['type' => 'authentication_error', 'message' => 'This key is not valid on rekhu.test']], 401)]);
+        $this->artisan('rekhu:core --check')->expectsOutputToContain('not valid on rekhu.test')->assertFailed();
+    }
 }

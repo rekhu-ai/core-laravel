@@ -46,6 +46,6 @@ class Knower
     /** What the user did with an answer (its ref): accepted, corrected (with the correction) or rejected. */
     public function feedback(string $ref, string $outcome, ?array $correction = null): array
     {
-        return $this->client->feedback($this->knower, $ref, $outcome, $correction);
+        return $this->client->feedback($this->knower, $ref, $outcome, $correction, $this->user, $this->tenant);
     }
 }

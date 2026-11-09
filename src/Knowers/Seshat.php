@@ -101,16 +101,38 @@ class Seshat extends Knower
     /** The bytes of a file Seshat made (the fixed PDF). */
     public function download(string $fileId): string
     {
-        return $this->client->download('seshat', $fileId);
+        return $this->client->download('seshat', $fileId, $this->user, $this->tenant);
+    }
+
+    /** The same, written straight to a path: for large print files, without holding them in memory. */
+    public function downloadTo(string $fileId, string $path): string
+    {
+        return $this->client->downloadTo('seshat', $fileId, $path, $this->user, $this->tenant);
+    }
+
+    /** A file Rekhu keeps for a day, removed now: a customer took it out of their order. */
+    public function remove(string $fileId): void
+    {
+        $this->client->remove('seshat', $fileId, $this->user, $this->tenant);
+    }
+
+    /**
+     * Every finding code, decision and fix with its options, versioned: map your own tool's names against it. An "ask"
+     * finding carries the same options as ['id' => 'upload_new' | 'print_as_is' | 'fix:<fix>[:<option>]', 'fix'?, 'option'?].
+     * Not charged.
+     */
+    public function codes(): array
+    {
+        return $this->call('codes');
     }
 
     private function file(UploadedFile|string $file, ?string $name): array
     {
         if ($file instanceof UploadedFile) {
-            return ['name' => $name ?? $file->getClientOriginalName(), 'bytes' => (string) file_get_contents($file->getRealPath())];
+            return ['name' => $name ?? $file->getClientOriginalName(), 'path' => $file->getRealPath()];
         }
         if (strlen($file) < 4096 && is_file($file)) {
-            return ['name' => $name ?? basename($file), 'bytes' => (string) file_get_contents($file)];
+            return ['name' => $name ?? basename($file), 'path' => $file];
         }
         if ($name === null) {
             throw new RekhuException("Give the file's name with its bytes: check(\$bytes, \$order, name: 'flyer.pdf').", 0, 'invalid_request_error');

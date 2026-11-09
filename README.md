@@ -33,8 +33,10 @@ No Rekhu account yet? [Create one](https://rekhu.com/register?ref=core-laravel):
 | `REKHU_APP_KEY` | the app key; an app with Rekhu Assistant can use its `REKHU_ASSISTANT_KEY` |
 | `REKHU_TENANCY` | `single` (the app is one customer) or `multi` (every user belongs to one of your customers) |
 | `REKHU_LOCALES` | the languages your users read |
-| `REKHU_KNOWERS` | the knowers this app uses; `rekhu:core --install=machines` adds one after checking Rekhu has it |
+| `REKHU_KNOWERS` | optional: limit the app to these knowers; empty means every knower the key allows |
 | `REKHU_DEPLOYMENT`, `REKHU_PLATFORM` | where Rekhu runs, see below |
+
+`php artisan rekhu:core --check` calls Rekhu with the key and shows which platform answered, its version, the account and the agent. A key works only on the platform it was made on: a local or test key gives a 401 on production that says so.
 
 ## Tenants, languages, limits and your own prices
 
@@ -82,6 +84,23 @@ $proof = Rekhu::seshat()->preview($fixed['file_id']);                       // a
 | Pictures (JPG, PNG, TIFF) at the ordered size, EPS, zips of files, locked files | `picture_to_pdf` |
 
 The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_text_pt` (6), `spot_colours_allowed`. Rekhu keeps a file for a day, so a fix or a preview can follow a check without sending it again. Findings are codes with values: show the explanation, or your own text per code.
+
+**Every code, decision and fix in one list.** `Rekhu::seshat()->codes()` (free) answers the versioned list to map your own tool's names against: each code with its levels, decisions, fix and options, and each fix with the options it takes.
+
+**A question without a model.** Every finding with the decision `ask` carries its `options`, so you can offer the choice without `explain`:
+
+```php
+// ['code' => 'size_differs', 'decision' => 'ask', 'options' => [
+//     ['id' => 'fix:scale_to_size:fit', 'fix' => 'scale_to_size', 'option' => 'fit', 'about' => 'fit inside the ordered size'],
+//     ['id' => 'fix:scale_to_size:fill', 'fix' => 'scale_to_size', 'option' => 'fill', 'about' => 'fill the ordered size, cropping the edges'],
+//     ['id' => 'upload_new', 'about' => 'the customer sends a new file']]]
+```
+
+**Fixes only, your own check.** An app with its own preflight sends the file with `upload()` (free) and asks for the fixes it found: `fix($fileId, [['fix' => 'add_bleed'], ['fix' => 'convert_cmyk']], $order)`. An unknown fix or option is refused with an `InvalidRequest` listing the allowed ones, and nothing is charged. `applied` lists every change, also a side effect (fonts embedded by the CMYK conversion, with `side_effect_of`), and `resolved` the finding codes the file no longer has.
+
+**Large files** are streamed from their path; `downloadTo($fileId, $path)` writes the result straight to disk. `remove($fileId)` deletes a kept file at once. File names keep every character (Müller, مرحبا).
+
+**What it costs.** `meta.usage` has one line per charged item: the check (`seshat`) and, with `explain`, the explanation (`seshat_explain`, the model call). A refused call, or a fix with nothing to do, costs nothing.
 
 ## Seshat AI: one picture improved (ai_enhance)
 
@@ -194,4 +213,18 @@ The knowers, their answers and this package are the same in every deployment.
 
 ## Errors
 
-`Rekhu\Core\Exceptions\RekhuException` with `status` and `type` (Rekhu's refusal, for example a job without a size: 422), and `LimitReached` (429, `scope` tenant or user) for your own limits.
+Every refusal is a `Rekhu\Core\Exceptions\RekhuException` with `status` and `type`, and its own class, so you catch what you handle:
+
+| Class | When |
+|---|---|
+| `InvalidKey` | 401: no key, a revoked key, or a key from another Rekhu platform |
+| `ModuleNotEnabled` | 403: the knower's module is off for this application |
+| `RegionUnavailable` | 403: the account is set to Europe only and this call has no engine in the EU |
+| `CreditExhausted` | 402: the account's credit is used up |
+| `AppPaused` | 402: the application is paused or at its monthly limit |
+| `FileNotFound` | 404: a kept file is past its day or removed |
+| `InvalidRequest` | 422: refused before anything ran, with what was wrong; not charged |
+| `RateLimited`, `Unavailable` | 429, 502, 503: after the client tried again |
+| `LimitReached` | your own limits (`scope` tenant or user) |
+
+A dropped connection, 429, 502 or 503 is tried again up to three times. Every charged call carries an `Idempotency-Key`, so a retry is never charged twice: Rekhu answers the first result again, with `meta.replayed`. In a queued job there is no signed-in user: name it with `->for($user)` or `->forTenant($id, $name)`.

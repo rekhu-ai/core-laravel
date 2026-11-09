@@ -13,4 +13,23 @@ class RekhuException extends RuntimeException
     {
         parent::__construct($message, $status);
     }
+
+    /** The typed exception for an answer from Rekhu: catch the one you handle, or this class for all of them. */
+    public static function from(int $status, string $type, string $message): self
+    {
+        $class = match (true) {
+            $status === 401 => InvalidKey::class,
+            $type === 'module_not_enabled' => ModuleNotEnabled::class,
+            $type === 'region_unavailable' => RegionUnavailable::class,
+            $type === 'app_limit' => AppPaused::class,
+            $status === 402 => CreditExhausted::class,
+            $status === 404 => FileNotFound::class,
+            $status === 422 || $status === 400 => InvalidRequest::class,
+            $status === 429 => RateLimited::class,
+            $status >= 500 => Unavailable::class,
+            default => self::class,
+        };
+
+        return new $class($message, $status, $type);
+    }
 }

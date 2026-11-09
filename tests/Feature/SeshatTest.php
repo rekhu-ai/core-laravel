@@ -8,6 +8,10 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Rekhu\Core\Exceptions\FileNotFound;
+use Rekhu\Core\Exceptions\InvalidRequest;
+use Rekhu\Core\Exceptions\ModuleNotEnabled;
+use Rekhu\Core\Exceptions\RekhuException;
 use Rekhu\Core\Rekhu;
 use Rekhu\Core\Tests\TestCase;
 
@@ -28,7 +32,7 @@ final class SeshatTest extends TestCase
 
         $this->assertSame('f_1', $check['file_id']);
         Http::assertSent(fn (Request $r) => $r->body() === "%PDF-1.7\nflyer" && $r->hasHeader('x-file-name', 'flyer.pdf')
-            && json_decode($r->header('x-knower-input')[0], true) === ['order' => ['width_mm' => 148, 'height_mm' => 210], 'explain' => true, 'language' => 'en']);
+            && json_decode($r->header('x-knower-input')[0], true) === ['order' => ['width_mm' => 148, 'height_mm' => 210], 'explain' => true, 'language' => 'en', 'name' => 'flyer.pdf']);
         $this->assertSame(['seshat', 'check'], [DB::table('rekhu_usage')->value('knower'), DB::table('rekhu_usage')->value('action')]);
     }
 
@@ -64,7 +68,7 @@ final class SeshatTest extends TestCase
         $result = Rekhu::seshat()->for($this->user())->enhance($photo, ['denoise', 'upscale'], ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70], ['webhook_url' => 'https://shop.test/hooks/rekhu']);
         $this->assertSame(1182, $result['width_px']);
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/enhance') && $r->body() === "\x89PNG fake"
-            && json_decode($r->header('x-knower-input')[0], true) === ['mode' => ['denoise', 'upscale'], 'options' => ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70], 'webhook_url' => 'https://shop.test/hooks/rekhu']);
+            && json_decode($r->header('x-knower-input')[0], true) === ['mode' => ['denoise', 'upscale'], 'options' => ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70], 'webhook_url' => 'https://shop.test/hooks/rekhu', 'name' => 'photo.png']);
         // a kept file goes by its id, as JSON
         Rekhu::seshat()->enhance('f_'.str_repeat('a', 24), 'remove_background');
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/enhance') && (json_decode($r->body(), true)['file_id'] ?? null) === 'f_'.str_repeat('a', 24) && (json_decode($r->body(), true)['mode'] ?? null) === ['remove_background']);
@@ -85,5 +89,58 @@ final class SeshatTest extends TestCase
         $this->assertFalse(Rekhu::verifyWebhook($body, $header, 'whsec_other'), 'another secret');
         $old = (string) (time() - 3600);
         $this->assertFalse(Rekhu::verifyWebhook($body, 't='.$old.',v1='.hash_hmac('sha256', $old.'.'.$body, 'whsec_abc'), 'whsec_abc'), 'too old');
+    }
+
+    public function test_a_file_name_in_any_language_arrives_whole(): void
+    {
+        Http::fake(['rekhu.test/v1/knowers/seshat/upload' => Http::response(['file_id' => 'f_'.str_repeat('c', 24), 'name' => 'Visitekaartje-Müller-مرحبا.pdf'])]);
+        Rekhu::seshat()->upload(UploadedFile::fake()->createWithContent('Visitekaartje-Müller-مرحبا.pdf', '%PDF-1.7'));
+        Http::assertSent(fn (Request $r) => $r->hasHeader('x-file-name', rawurlencode('Visitekaartje-Müller-مرحبا.pdf'))
+            && json_decode($r->header('x-knower-input')[0], true)['name'] === 'Visitekaartje-Müller-مرحبا.pdf');
+    }
+
+    public function test_every_refusal_is_its_own_exception(): void
+    {
+        Http::fake([
+            'rekhu.test/v1/knowers/seshat/fix' => Http::response(['type' => 'error', 'error' => ['type' => 'invalid_request_error', 'message' => 'unknown fix "make_coffee"']], 422),
+            'rekhu.test/v1/knowers/seshat/enhance' => Http::response(['type' => 'error', 'error' => ['type' => 'module_not_enabled', 'message' => 'off']], 403),
+            'rekhu.test/v1/knowers/seshat/files/*' => Http::response(['type' => 'error', 'error' => ['type' => 'not_found_error', 'message' => 'no such file']], 404),
+        ]);
+        foreach ([
+            [fn () => Rekhu::seshat()->for($this->user())->fix('f_1', [['fix' => 'make_coffee']]), InvalidRequest::class],
+            [fn () => Rekhu::seshat()->for($this->user())->enhance('f_'.str_repeat('a', 24), 'upscale'), ModuleNotEnabled::class],
+            [fn () => Rekhu::seshat()->download('f_gone'), FileNotFound::class],
+        ] as [$call, $class]) {
+            try {
+                $call();
+                $this->fail("expected {$class}");
+            } catch (RekhuException $e) {
+                $this->assertInstanceOf($class, $e);
+            }
+        }
+        $this->assertSame(0, DB::table('rekhu_usage')->count(), 'a refused call is not kept');
+    }
+
+    public function test_a_busy_rekhu_is_tried_again_under_one_idempotency_key(): void
+    {
+        Http::fakeSequence('rekhu.test/v1/knowers/seshat/fix')
+            ->push(['type' => 'error', 'error' => ['type' => 'overloaded_error', 'message' => 'busy']], 503, ['retry-after' => '0'])
+            ->push($this->answer(['file_id' => 'f_3', 'applied' => [['fix' => 'add_bleed']]]));
+        $this->assertSame('f_3', Rekhu::seshat()->for($this->user())->fix('f_1', [['fix' => 'add_bleed']])['file_id']);
+        $keys = collect(Http::recorded())->map(fn ($pair) => $pair[0]->header('idempotency-key')[0] ?? null)->all();
+        $this->assertCount(2, $keys);
+        $this->assertSame($keys[0], $keys[1], 'the retry carries the same key, so it is never charged twice');
+    }
+
+    public function test_a_kept_file_can_be_removed_and_the_codes_listed(): void
+    {
+        Http::fake([
+            'rekhu.test/v1/knowers/seshat/files/f_1' => Http::response('', 204),
+            'rekhu.test/v1/knowers/seshat/codes' => Http::response(['version' => '1.0', 'codes' => ['bleed_missing' => ['decisions' => ['fix']]]]),
+        ]);
+        Rekhu::seshat()->remove('f_1');
+        Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/files/f_1'));
+        $this->assertSame('1.0', Rekhu::seshat()->codes()['version']);
+        $this->assertSame(0, DB::table('rekhu_usage')->count(), 'listing the codes is not charged');
     }
 }

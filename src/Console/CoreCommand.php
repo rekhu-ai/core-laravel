@@ -8,6 +8,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Rekhu\Core\Client;
+use Rekhu\Core\Exceptions\RekhuException;
 use Rekhu\Core\Rekhu;
 
 /**
@@ -15,12 +17,14 @@ use Rekhu\Core\Rekhu;
  * php artisan rekhu:core --install                    connects the app: key, deployment, tenancy, languages
  * php artisan rekhu:core --install=machines           adds a knower, after checking Rekhu has it for this key
  * php artisan rekhu:core --usage [--month=] [--tenant=] [--csv=]   the usage per tenant in a month
+ * php artisan rekhu:core --check                      reaches Rekhu with the key: platform, version, names, what the key may use
  */
 class CoreCommand extends Command
 {
     protected $signature = 'rekhu:core
         {--install= : connect the app, or with a name add that knower (--install=machines)}
         {--usage : the usage per tenant in a month}
+        {--check : reach Rekhu with the key and show what it may use}
         {--month= : with --usage: YYYY-MM, this month by default}
         {--tenant= : with --usage: one tenant}
         {--csv= : with --usage: also write the rows to this file}
@@ -36,6 +40,9 @@ class CoreCommand extends Command
     {
         if ($this->option('usage')) {
             return $this->usage();
+        }
+        if ($this->option('check')) {
+            return $this->check();
         }
         if ($this->input->hasParameterOption('--install')) {
             return $this->option('install') ? $this->addKnower((string) $this->option('install')) : $this->connect();
@@ -55,6 +62,28 @@ class CoreCommand extends Command
             ['Knowers', implode(', ', (array) config('rekhu.knowers')) ?: 'none yet (php artisan rekhu:core --install=machines)'],
             ['Usage table', config('rekhu.ledger.enabled') ? (string) config('rekhu.ledger.table') : 'off'],
         ]);
+
+        return self::SUCCESS;
+    }
+
+    /** One call to Rekhu with the app key: which platform answered, its version, the key's names and what the key may use. */
+    private function check(): int
+    {
+        try {
+            $me = app(Client::class)->ping();
+        } catch (RekhuException $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+        $rows = [['Platform', $me['platform'].($me['version'] ? ' · version '.$me['version'] : '')]];
+        $name = fn ($v) => is_array($v) ? (string) ($v['name'] ?? $v['slug'] ?? '') : (string) $v;
+        $rows[] = ['Account', $name($me['customer'] ?? '')];
+        $rows[] = ['Agent', $name($me['agent'] ?? '')];
+        $rows[] = ['Key', $name($me['key']['label'] ?? '')];
+        $rows[] = ['Project', $name($me['project'] ?? '')];
+        $this->table(['', ''], $rows);
+        $this->info('Rekhu answers with this key.');
 
         return self::SUCCESS;
     }
