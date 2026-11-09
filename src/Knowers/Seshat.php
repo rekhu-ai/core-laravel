@@ -126,6 +126,15 @@ class Seshat extends Knower
         return $this->call('codes');
     }
 
+    /**
+     * The fonts embed_fonts can put in: families with their styles, PostScript names and licences, for an editor that
+     * lets the customer change text. Not charged.
+     */
+    public function fonts(): array
+    {
+        return $this->call('fonts');
+    }
+
     private function file(UploadedFile|string $file, ?string $name): array
     {
         if ($file instanceof UploadedFile) {

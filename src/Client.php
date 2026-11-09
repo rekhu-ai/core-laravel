@@ -25,7 +25,7 @@ use Rekhu\Core\Exceptions\Unavailable;
  */
 class Client
 {
-    private const FREE = ['models', 'modules', 'codes', 'upload', 'poll', 'enhance_preview'];
+    private const FREE = ['models', 'modules', 'codes', 'fonts', 'upload', 'poll', 'enhance_preview'];
 
     private const TRIES = 3;
 

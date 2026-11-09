@@ -98,6 +98,8 @@ The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_
 
 **Fixes only, your own check.** An app with its own preflight sends the file with `upload()` (free) and asks for the fixes it found: `fix($fileId, [['fix' => 'add_bleed'], ['fix' => 'convert_cmyk']], $order)`. An unknown fix or option is refused with an `InvalidRequest` listing the allowed ones, and nothing is charged. `applied` lists every change, also a side effect (fonts embedded by the CMYK conversion, with `side_effect_of`), and `resolved` the finding codes the file no longer has.
 
+**Fonts.** A file that uses fonts without carrying them gets them from Seshat's font library (open-licence fonts by their PostScript name, such as `Montserrat-Bold`): `fix($id, [['fix' => 'embed_fonts']])` puts in the same font; `['fix' => 'embed_fonts', 'option' => 'lookalike']` also puts in a look-alike for the others. `applied` says per font `same`, `lookalike` (with `as`), `not_available` or `not_possible`: a font is never swapped without a word. `fonts()` (free) lists the library for your own text editor.
+
 **Large files** are streamed from their path; `downloadTo($fileId, $path)` writes the result straight to disk. `remove($fileId)` deletes a kept file at once. File names keep every character (Müller, مرحبا).
 
 **What it costs.** `meta.usage` has one line per charged item: the check (`seshat`) and, with `explain`, the explanation (`seshat_explain`, the model call). A refused call, or a fix with nothing to do, costs nothing.

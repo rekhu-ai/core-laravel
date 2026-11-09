@@ -4,6 +4,13 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+
+## 0.4.0 · 9 November 2026
+
+- **Seshat fonts:** `Rekhu::seshat()->fonts()` (free) lists the font library: families, styles, PostScript names and licences, for an editor that lets customers change text.
+- `embed_fonts` puts in the same font from the library; the option `lookalike` puts in a named look-alike for the others. `applied` says per font: `same`, `lookalike` (with `as`), `not_available` or `not_possible` (Type 3). A font is never swapped without a word, also not by `convert_cmyk`.
+- `fonts_not_embedded` names `in_library` and `not_in_library`; it is decided `fix` only when the library has every font.
+- `upscale_ai` in `applied` gives `images`, `from_ppi` and `to_ppi`.
 ## 0.3.0 · 9 November 2026
 
 - **Typed exceptions.** Every refusal has its own class under `RekhuException` (so existing catches keep working): `InvalidKey`, `ModuleNotEnabled`, `RegionUnavailable`, `CreditExhausted`, `AppPaused`, `FileNotFound`, `InvalidRequest`, `RateLimited`, `Unavailable`.
