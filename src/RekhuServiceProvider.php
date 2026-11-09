@@ -16,7 +16,9 @@ class RekhuServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        if (config('rekhu.ledger.enabled')) {
+            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        }
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/rekhu.php' => config_path('rekhu.php')], 'rekhu-config');
             $this->commands([Console\CoreCommand::class]);

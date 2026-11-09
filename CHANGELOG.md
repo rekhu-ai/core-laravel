@@ -2,6 +2,11 @@
 
 All notable changes to `rekhu/core`. Versions follow [semantic versioning](https://semver.org).
 
+
+## 0.2.1 · 9 November 2026
+
+- **The ledger's migration only when the ledger is on.** With `REKHU_LEDGER=false` the package no longer adds the `rekhu_usage` table to the app's migrations.
+- **Seshat's explanation on its own line.** A check with `explain: true` now shows two lines in `meta.usage`: the check (`seshat`) and the explanation (`seshat_explain`), so an app can show and charge them separately. Nothing changes in the calls.
 ## 0.2.0 · 6 November 2026
 
 - **Seshat in modules.** `Rekhu::seshat()->modules()` says which modules this application may use: `preflight` (check, fix, preview) and `ai_enhance`. Rekhu switches them on per application; a call to a module that is off is refused with `module_not_enabled`.
