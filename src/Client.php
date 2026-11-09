@@ -85,6 +85,19 @@ class Client
         return $path;
     }
 
+    /**
+     * A font of a knower's font library by its PostScript name (TrueType), with its licence; written to $path when given.
+     *
+     * @return array{name: string, licence: ?string, bytes?: string, path?: string}
+     */
+    public function fontFile(string $knower, string $name, ?string $path = null): array
+    {
+        $request = $this->request($this->filesHeaders(null, null));
+        $response = $this->send(fn () => ($path ? $request->withOptions(['sink' => $path]) : $request)->get("/v1/knowers/{$knower}/fonts/".rawurlencode($name)));
+
+        return ['name' => $name, 'licence' => $response->header('x-font-licence') ?: null] + ($path ? ['path' => $path] : ['bytes' => $response->body()]);
+    }
+
     /** A file Rekhu keeps for a day, removed now (a customer took it out of their order). */
     public function remove(string $knower, string $fileId, ?Authenticatable $user = null, ?array $tenant = null): void
     {

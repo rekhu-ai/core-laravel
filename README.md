@@ -98,7 +98,18 @@ The order's other values: `min_ppi` (250), `safe_mm` (3), `max_ink` (320), `min_
 
 **Fixes only, your own check.** An app with its own preflight sends the file with `upload()` (free) and asks for the fixes it found: `fix($fileId, [['fix' => 'add_bleed'], ['fix' => 'convert_cmyk']], $order)`. An unknown fix or option is refused with an `InvalidRequest` listing the allowed ones, and nothing is charged. `applied` lists every change, also a side effect (fonts embedded by the CMYK conversion, with `side_effect_of`), and `resolved` the finding codes the file no longer has.
 
-**Fonts.** A file that uses fonts without carrying them gets them from Seshat's font library (open-licence fonts by their PostScript name, such as `Montserrat-Bold`): `fix($id, [['fix' => 'embed_fonts']])` puts in the same font; `['fix' => 'embed_fonts', 'option' => 'lookalike']` also puts in a look-alike for the others. `applied` says per font `same`, `lookalike` (with `as`), `not_available` or `not_possible`: a font is never swapped without a word. `fonts()` (free) lists the library for your own text editor.
+**Fonts.** A file that uses fonts without carrying them gets them from Seshat's font library (open-licence fonts by their PostScript name, such as `Montserrat-Bold`): `fix($id, [['fix' => 'embed_fonts']])` puts in the same font; `['fix' => 'embed_fonts', 'option' => 'lookalike']` also puts in a look-alike for the others. `applied` says per font `same`, `lookalike` (with `as`), `not_available` or `not_possible`: a font is never swapped without a word. `fonts()` (free) lists the library for your own text editor, and `fontFile('Montserrat-Bold')` (free) gives the font itself with its licence, for an app that sets text with its own tool.
+
+**Text and fonts.** `replace_text` changes words at the same place and size, and `replace_font` sets all text of one font in a library font. Both can come several times in one call, applied in order:
+
+```php
+Rekhu::seshat()->fix($id, [
+    ['fix' => 'replace_text', 'find' => 'Summer sale', 'replace' => 'Winter sale'],
+    ['fix' => 'replace_font', 'from' => 'ArialMT', 'to' => 'Montserrat-Bold'],
+], $order);
+```
+
+New text goes in the file's own font when it has the letters, else the same font from the library, else `to`; otherwise it stays and `applied` names the missing letters. Text does not re-wrap: for a new paragraph, change it before the PDF is made.
 
 **Large files** are streamed from their path; `downloadTo($fileId, $path)` writes the result straight to disk. `remove($fileId)` deletes a kept file at once. File names keep every character (Müller, مرحبا).
 

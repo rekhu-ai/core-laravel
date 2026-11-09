@@ -5,6 +5,14 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+
+## 0.5.0 · 9 November 2026
+
+- **Text and fonts in a print file.** Two Seshat fixes, each several times per call, in order, as one charge:
+  - `['fix' => 'replace_text', 'find' => 'Summer sale', 'replace' => 'Winter sale', 'to' => 'Lato-Regular']` changes words at the same place and size: in the file's own font when it has the letters, else the same font from the library, else `to`. Otherwise the text stays and is reported with the missing letters. The new text does not re-wrap.
+  - `['fix' => 'replace_font', 'from' => 'ArialMT', 'to' => 'Montserrat-Bold']` sets all text in `from` in a library font. `applied` reports per font: `texts` changed, `not_set`, `missing_letters`, and `not_found` or `not_possible` (Type 3).
+  - A `to` that is not in the library is refused with `InvalidRequest` naming the closest fonts; Seshat never picks a font itself.
+- **`fontFile($name)` and `fontFileTo($name, $path)`** (free): a library font as TrueType with its licence, for an app that sets text with its own tool.
 ## 0.4.0 · 9 November 2026
 
 - **Seshat fonts:** `Rekhu::seshat()->fonts()` (free) lists the font library: families, styles, PostScript names and licences, for an editor that lets customers change text.

@@ -137,12 +137,15 @@ final class SeshatTest extends TestCase
         Http::fake([
             'rekhu.test/v1/knowers/seshat/files/f_1' => Http::response('', 204),
             'rekhu.test/v1/knowers/seshat/codes' => Http::response(['version' => '1.0', 'codes' => ['bleed_missing' => ['decisions' => ['fix']]]]),
+            'rekhu.test/v1/knowers/seshat/fonts/Montserrat-Bold' => Http::response("\x00\x01\x00\x00ttf", 200, ['x-font-licence' => 'OFL-1.1']),
             'rekhu.test/v1/knowers/seshat/fonts' => Http::response(['count' => 1, 'families' => [['family' => 'Montserrat', 'styles' => [['name' => 'Montserrat-Bold']]]]]),
         ]);
         Rekhu::seshat()->remove('f_1');
         Http::assertSent(fn (Request $r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/files/f_1'));
         $this->assertSame('1.0', Rekhu::seshat()->codes()['version']);
         $this->assertSame('Montserrat-Bold', Rekhu::seshat()->fonts()['families'][0]['styles'][0]['name']);
+        $font = Rekhu::seshat()->fontFile('Montserrat-Bold');
+        $this->assertSame(['name' => 'Montserrat-Bold', 'licence' => 'OFL-1.1', 'bytes' => "\x00\x01\x00\x00ttf"], $font);
         $this->assertSame(0, DB::table('rekhu_usage')->count(), 'listing the codes and fonts is not charged');
     }
 }

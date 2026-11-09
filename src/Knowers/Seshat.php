@@ -117,6 +117,23 @@ class Seshat extends Knower
     }
 
     /**
+     * A font of the library by its PostScript name, as TrueType bytes with its licence (OFL, Apache or UFL, all free to
+     * use and embed): for an app that sets text with its own tool. Not charged.
+     *
+     * @return array{name: string, licence: ?string, bytes: string}
+     */
+    public function fontFile(string $name): array
+    {
+        return $this->client->fontFile('seshat', $name);
+    }
+
+    /** The same, written straight to a path. */
+    public function fontFileTo(string $name, string $path): array
+    {
+        return $this->client->fontFile('seshat', $name, $path);
+    }
+
+    /**
      * Every finding code, decision and fix with its options, versioned: map your own tool's names against it. An "ask"
      * finding carries the same options as ['id' => 'upload_new' | 'print_as_is' | 'fix:<fix>[:<option>]', 'fix'?, 'option'?].
      * Not charged.
