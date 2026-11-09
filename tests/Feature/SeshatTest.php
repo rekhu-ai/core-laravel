@@ -148,4 +148,19 @@ final class SeshatTest extends TestCase
         $this->assertSame(['name' => 'Montserrat-Bold', 'licence' => 'OFL-1.1', 'bytes' => "\x00\x01\x00\x00ttf"], $font);
         $this->assertSame(0, DB::table('rekhu_usage')->count(), 'listing the codes and fonts is not charged');
     }
+
+    public function test_files_are_merged_split_and_drawn_as_pictures(): void
+    {
+        Http::fake([
+            'rekhu.test/v1/knowers/seshat/merge' => Http::response(['file_id' => 'f_m', 'pages' => 3, 'meta' => ['cost_usd' => 0.01]]),
+            'rekhu.test/v1/knowers/seshat/split' => Http::response(['parts' => [['range' => '1-2', 'file_id' => 'f_a']], 'meta' => ['cost_usd' => 0.01]]),
+            'rekhu.test/v1/knowers/seshat/render' => Http::response(['pictures' => [['page' => 1, 'file_id' => 'f_p']], 'meta' => ['cost_usd' => 0.01]]),
+        ]);
+        $this->assertSame(3, Rekhu::seshat()->merge(['f_1', 'f_2'])['pages']);
+        $this->assertSame('f_a', Rekhu::seshat()->split('f_m', ['1-2'])['parts'][0]['file_id']);
+        $this->assertSame('f_p', Rekhu::seshat()->render('f_m', 'jpg', 72, '1')['pictures'][0]['file_id']);
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/merge') && $r['file_ids'] === ['f_1', 'f_2']);
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/render') && $r['format'] === 'jpg' && $r['dpi'] === 72);
+        $this->assertSame(3, DB::table('rekhu_usage')->count(), 'merge, split and render are charged and kept in the ledger');
+    }
 }

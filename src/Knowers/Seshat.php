@@ -56,6 +56,32 @@ class Seshat extends Knower
         return $this->call('preview', ['file_id' => $fileId, 'page' => $page, 'longest' => $longest]);
     }
 
+    /**
+     * Two or more kept files as one, in the order given: the new file_id, its pages and the pages per file.
+     *
+     * @param  list<string>  $fileIds
+     */
+    public function merge(array $fileIds, ?string $name = null): array
+    {
+        return $this->call('merge', array_filter(['file_ids' => array_values($fileIds), 'name' => $name]));
+    }
+
+    /**
+     * A kept file as one file per page range: parts with their range, pages and file_id.
+     *
+     * @param  list<string>  $ranges  such as ['1-2', '3-end']
+     */
+    public function split(string $fileId, array $ranges): array
+    {
+        return $this->call('split', ['file_id' => $fileId, 'ranges' => array_values($ranges)]);
+    }
+
+    /** Pages as pictures (png or jpg, 36–600 dpi, pages such as '1-3'), each kept as a file to download. */
+    public function render(string $fileId, string $format = 'png', int $dpi = 150, ?string $pages = null): array
+    {
+        return $this->call('render', array_filter(['file_id' => $fileId, 'format' => $format, 'dpi' => $dpi, 'pages' => $pages]));
+    }
+
     /** Which modules this application may use (preflight, ai_enhance) and the modes: show only what may be used. Not charged. */
     public function modules(): array
     {
