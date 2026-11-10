@@ -49,6 +49,26 @@ final class SeshatTest extends TestCase
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/fix') && $r['fixes'] === 'auto' && $r['file_id'] === 'f_1');
     }
 
+    public function test_a_template_is_uploaded_once_and_its_rows_go_in_steps(): void
+    {
+        $id = 'f_'.str_repeat('c', 24);
+        Http::fake([
+            'rekhu.test/v1/knowers/seshat/upload' => Http::response(['file_id' => $id]),
+            'rekhu.test/v1/knowers/seshat/fill_template' => Http::response(['status' => 'open', 'job_id' => 'j_9']),
+            'rekhu.test/v1/knowers/seshat/poll' => Http::response(['job_id' => 'j_9', 'status' => 'done', 'result' => ['files' => [['rows' => '1-250']]]]),
+            'rekhu.test/v1/knowers/seshat/text_positions' => Http::response(['found' => [['find' => '[name]', 'page' => 1, 'font' => 'Helvetica', 'size' => 14]]]),
+        ]);
+        $rows = array_map(fn ($i) => ['[name]' => "Student {$i}"], range(1, 2500));
+        Rekhu::seshat()->fillTemplate("%PDF-1.7\ntemplate", $rows, ['name' => 'certificate.pdf', 'name_by' => '[name]', 'webhook_url' => 'https://shop.test/hook']);
+        $fills = collect(Http::recorded())->map(fn ($pair) => $pair[0])->filter(fn (Request $r) => str_ends_with($r->url(), '/fill_template'))->map(fn (Request $r) => json_decode($r->body(), true))->values();
+        $this->assertSame([[1000, $id, true, null], [1000, 'j_9', true, null], [500, 'j_9', false, 'https://shop.test/hook']], $fills->map(fn ($f) => [count($f['rows']), $f['file_id'] ?? $f['job_id'], (bool) ($f['more'] ?? false), $f['webhook_url'] ?? null])->all());
+        $this->assertSame('[name]', $fills[0]['name_by']);
+        Http::assertSentCount(4);
+        $this->assertSame('done', Rekhu::seshat()->waitFor('j_9', 5, 0.01)['status']);
+        $this->assertSame('Helvetica', Rekhu::seshat()->textPositions($id, ['[name]'])['found'][0]['font']);
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/text_positions') && json_decode($r->body(), true) === ['file_id' => $id, 'find' => ['[name]']]);
+    }
+
     public function test_bytes_need_a_name(): void
     {
         $this->expectExceptionMessage("file's name");

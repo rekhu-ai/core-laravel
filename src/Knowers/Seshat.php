@@ -118,10 +118,54 @@ class Seshat extends Knower
         return $this->call('enhance_preview', ['file_id' => $fileId, 'longest' => $longest]);
     }
 
-    /** A job (enhance on a large picture): queued, running, done with its result, or failed with why. */
+    /** A job (enhance on a large picture, fillTemplate): open, queued, running with how far, done with its result, or failed with why. */
     public function poll(string $jobId): array
     {
         return $this->call('poll', ['job_id' => $jobId]);
+    }
+
+    /** A job polled until it is done or failed (every 2 s, up to 10 minutes by default): its last answer. */
+    public function waitFor(string $jobId, int $timeoutSeconds = 600, float $everySeconds = 2.0): array
+    {
+        $until = time() + $timeoutSeconds;
+        while (true) {
+            $job = $this->poll($jobId);
+            if (in_array($job['status'] ?? null, ['done', 'failed'], true) || time() > $until) {
+                return $job;
+            }
+            usleep((int) ($everySeconds * 1_000_000));
+        }
+    }
+
+    /**
+     * A copy of a template per row: rows are maps ['[name]' => 'Sara'] or lists of ['find' => …, 'replace' => …]. The
+     * template is an upload, a path, bytes with a name, or a file_id; long lists go in steps of 1000 by themselves.
+     * Answers the job ['status' => 'queued', 'job_id' => …]: waitFor() it for the files (a ZIP or a merged PDF per 250
+     * copies) and a report per row. options: output ('zip' | 'merged'), name_by (the find whose value names each file),
+     * webhook_url, name. Charged per copy in which something was replaced.
+     */
+    public function fillTemplate(UploadedFile|string $template, array $rows, array $options = []): array
+    {
+        if ($rows === []) {
+            throw new RekhuException('rows is a list of rows, one per copy.', 0, 'invalid_request_error');
+        }
+        $fileId = $this->fileId($template, $options['name'] ?? null);
+        $job = null;
+        foreach (array_chunk(array_values($rows), 1000) as $i => $chunk) {
+            $last = ($i + 1) * 1000 >= count($rows);
+            $input = ['rows' => $chunk]
+                + ($job ? ['job_id' => $job['job_id']] : array_filter(['file_id' => $fileId, 'output' => $options['output'] ?? 'zip', 'name_by' => $options['name_by'] ?? null]))
+                + ($last ? array_filter(['webhook_url' => $options['webhook_url'] ?? null]) : ['more' => true]);
+            $job = $this->call('fill_template', $input);
+        }
+
+        return $job;
+    }
+
+    /** Where texts sit in a file (an upload, a path, bytes with a name, or a file_id): page, box in points from the bottom left, font and size. */
+    public function textPositions(UploadedFile|string $file, string|array $find, bool $matchCase = true, ?string $name = null): array
+    {
+        return $this->call('text_positions', ['file_id' => $this->fileId($file, $name), 'find' => $find] + ($matchCase ? [] : ['match_case' => false]));
     }
 
     /** The bytes of a file Seshat made (the fixed PDF). */
@@ -176,6 +220,16 @@ class Seshat extends Knower
     public function fonts(): array
     {
         return $this->call('fonts');
+    }
+
+    /** A file_id as it is, or the file uploaded first for one. */
+    private function fileId(UploadedFile|string $file, ?string $name): string
+    {
+        if (is_string($file) && preg_match('/^f_[a-z0-9]{24}$/', $file)) {
+            return $file;
+        }
+
+        return $this->upload($file, $name)['file_id'];
     }
 
     private function file(UploadedFile|string $file, ?string $name): array

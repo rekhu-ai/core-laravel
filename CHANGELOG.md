@@ -7,6 +7,13 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.7.0 · 10 November 2026
+
+- **Templates filled per row:** `fillTemplate($template, $rows, $options)` makes a copy of a PDF template per row (`['[name]' => 'Sara', '[grade]' => 'A']`, or lists of `find` / `replace`). The template is uploaded once and long lists go in steps of 1000 by themselves; the job gives a ZIP of one PDF per row, or a merged PDF, per 250 copies, and a report per row (replaced, not found, missing letters). `output`, `name_by` (name each file by a placeholder's value) and `webhook_url`. Charged per copy.
+- `waitFor($jobId)` polls a job until it is done or failed.
+- `textPositions($file, $find)`: page, box in points from the bottom left, font and size of every match.
+- `replace_text` now finds a placeholder an editor split into several pieces, and an empty `replace` deletes the text.
+
 ## 0.6.0 · 9 November 2026
 
 - **Pages:** `merge($fileIds)`, `split($fileId, ['1-2', '3-end'])` and `render($fileId, 'jpg', 150)` (pages as pictures), each kept as files to download.

@@ -24,7 +24,7 @@ use Rekhu\Core\Knowers\Seshat;
  */
 class Rekhu
 {
-    public const VERSION = '0.6.0';
+    public const VERSION = '0.7.0';
 
     private static ?Closure $tenant = null;
 
