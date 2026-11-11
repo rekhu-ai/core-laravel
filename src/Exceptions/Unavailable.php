@@ -4,5 +4,5 @@ declare(strict_types=1);
 
 namespace Rekhu\Core\Exceptions;
 
-/** Rekhu or a service behind it could not answer; the client already tried again (502, 503, 529). */
+/** Rekhu or a service behind it could not answer (5xx); tried again first when the platform was unreachable. */
 class Unavailable extends RekhuException {}

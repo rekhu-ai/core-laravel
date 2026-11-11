@@ -31,13 +31,13 @@ final class KnowersTest extends TestCase
         Rekhu::tenantUsing(fn ($user) => ['id' => $user->team, 'name' => 'Shop 42']);
         Rekhu::priceUsing(fn ($tenant, $knower, $action) => $action === 'identify' ? 0.05 : null);
         Event::fake([KnowerUsed::class]);
-        Http::fake(['rekhu.test/v1/knowers/machines/identify' => Http::response($this->answer(['match' => ['id' => 'heidelberg-sm-74']], 1, 0.0069))]);
+        Http::fake(['rekhu.test/v1/knowers/machines/identify' => Http::response($this->answer(['match' => ['id' => 'exampla-offset-74']], 1, 0.0069))]);
 
-        $answer = Rekhu::machines()->for($this->user())->identify('Heidelberg SM 74-4');
+        $answer = Rekhu::machines()->for($this->user())->identify('Exampla Offset 74-4');
 
-        $this->assertSame('heidelberg-sm-74', $answer['match']['id']);
+        $this->assertSame('exampla-offset-74', $answer['match']['id']);
         Http::assertSent(fn (Request $r) => $r->hasHeader('x-api-key', self::KEY) && $r->hasHeader('x-agent', 'assistant') && $r->hasHeader('x-tenant', 'shop-42')
-            && $r->hasHeader('x-tenant-name', 'Shop 42') && $r->hasHeader('x-user', '7') && $r['text'] === 'Heidelberg SM 74-4');
+            && $r->hasHeader('x-tenant-name', 'Shop 42') && $r->hasHeader('x-user', '7') && $r['text'] === 'Exampla Offset 74-4');
         $row = DB::table('rekhu_usage')->first();
         $this->assertSame(['shop-42', '7', 'machines', 'identify', 1], [$row->tenant_id, $row->user_id, $row->knower, $row->action, (int) $row->model_calls]);
         $this->assertEqualsWithDelta(0.0069, (float) $row->cost_usd, 1e-9);
@@ -51,8 +51,8 @@ final class KnowersTest extends TestCase
         Rekhu::machines()->choose(['width_mm' => 85, 'height_mm' => 55, 'quantity' => 1000], [['ref' => 'm1', 'method' => 'offset']]);
         Http::assertSent(fn (Request $r) => $r->hasHeader('x-tenant', 'app') && $r->hasHeader('x-tenant-name', 'Print Portal') && ! $r->hasHeader('x-user'));
 
-        Rekhu::machines()->forTenant('shop-9', 'Shop 9')->profile('heidelberg-sm-74', ['speed' => 12000]);
-        Http::assertSent(fn (Request $r) => $r->hasHeader('x-tenant', 'shop-9') && $r['model'] === 'heidelberg-sm-74' && $r['known']['speed'] === 12000);
+        Rekhu::machines()->forTenant('shop-9', 'Shop 9')->profile('exampla-offset-74', ['speed' => 12000]);
+        Http::assertSent(fn (Request $r) => $r->hasHeader('x-tenant', 'shop-9') && $r['model'] === 'exampla-offset-74' && $r['known']['speed'] === 12000);
     }
 
     public function test_the_check_is_explained_in_the_users_language(): void
@@ -60,8 +60,8 @@ final class KnowersTest extends TestCase
         config(['rekhu.locales' => ['en', 'nl']]);
         Rekhu::localeUsing(fn () => 'nl-BE');
         Http::fake(['rekhu.test/*' => Http::response($this->answer(['ok' => true, 'findings' => []]))]);
-        Rekhu::machines()->for($this->user())->check(['method' => 'offset', 'speed' => 18000], 'heidelberg-sm-74', true);
-        Http::assertSent(fn (Request $r) => $r['language'] === 'nl' && $r['explain'] === true && $r['model'] === 'heidelberg-sm-74');
+        Rekhu::machines()->for($this->user())->check(['method' => 'offset', 'speed' => 18000], 'exampla-offset-74', true);
+        Http::assertSent(fn (Request $r) => $r['language'] === 'nl' && $r['explain'] === true && $r['model'] === 'exampla-offset-74');
     }
 
     public function test_the_apps_own_limits_stop_a_call_before_it_is_sent(): void
@@ -73,7 +73,7 @@ final class KnowersTest extends TestCase
         Rekhu::machines()->for($this->user())->identify('SM 52');
 
         try {
-            Rekhu::machines()->for($this->user(8))->identify('SM 74');
+            Rekhu::machines()->for($this->user(8))->identify('Offset 74');
             $this->fail('the second call should be refused');
         } catch (LimitReached $e) {
             $this->assertSame('tenant', $e->scope);
@@ -81,7 +81,7 @@ final class KnowersTest extends TestCase
         }
         Http::assertSentCount(1);
         // another tenant still has its own day
-        Rekhu::machines()->for($this->user(9, 'shop-7'))->identify('SM 74');
+        Rekhu::machines()->for($this->user(9, 'shop-7'))->identify('Offset 74');
         Http::assertSentCount(2);
     }
 
@@ -99,7 +99,7 @@ final class KnowersTest extends TestCase
 
         config(['rekhu.knowers' => ['seshat']]);
         $this->expectExceptionMessage('REKHU_KNOWERS');
-        Rekhu::machines()->identify('SM 74');
+        Rekhu::machines()->identify('Offset 74');
     }
 
     public function test_multi_tenancy_without_a_tenant_is_refused(): void
@@ -107,7 +107,7 @@ final class KnowersTest extends TestCase
         config(['rekhu.tenancy' => 'multi']);
         Http::fake();
         $this->expectExceptionMessage('Rekhu::tenantUsing()');
-        Rekhu::machines()->for($this->user())->identify('SM 74');
+        Rekhu::machines()->for($this->user())->identify('Offset 74');
     }
 
     public function test_private_mode_needs_its_own_address(): void
@@ -115,7 +115,7 @@ final class KnowersTest extends TestCase
         config(['rekhu.deployment' => 'private', 'rekhu.platform' => 'https://api.rekhu.ai']);
         Http::fake();
         $this->expectExceptionMessage('REKHU_PLATFORM');
-        Rekhu::machines()->identify('SM 74');
+        Rekhu::machines()->identify('Offset 74');
     }
 
     public function test_feedback_goes_to_the_knower(): void

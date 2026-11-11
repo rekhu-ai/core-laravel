@@ -7,6 +7,13 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.9.1 · 11 November 2026
+
+In parity with @rekhu/core 0.9.1 for Node.js.
+
+- **Calls are tried again when the platform is briefly unreachable.** A dropped connection, or a 502, 503 or 504 without the platform's JSON error (the request never reached it, as during a deploy), is tried again up to 4 times in all, after 2, 4 and 8 seconds, under the same idempotency key. A busy platform (429, 529, or a 5xx with `overloaded_error` or `rate_limit_error`) is tried again as before, up to 3 times as long as `retry-after` asks (up to 5 seconds). Any other 5xx that carries the platform's own error fails at once.
+- **Examples use invented names.** The machine examples in the README, the class comment and the tests name an invented press.
+
 ## 0.9.0 · 11 November 2026
 
 In parity with @rekhu/core 0.9.0 for Node.js.

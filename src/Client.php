@@ -11,6 +11,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Rekhu\Core\Events\KnowerUsed;
 use Rekhu\Core\Exceptions\InvalidKey;
@@ -20,14 +21,23 @@ use Rekhu\Core\Exceptions\Unavailable;
 
 /**
  * Calls a knower on Rekhu for a user of the app: the app's own limits first, then the call with the user's tenant and
- * language, then the usage kept in the app's ledger and KnowerUsed fired. Calls that fail on the way (no connection,
- * 429, 502, 503) are tried again; a charged call carries an idempotency key, so a retry is never charged twice.
+ * language, then the usage kept in the app's ledger and KnowerUsed fired. Calls that do not reach the platform (no
+ * connection, a bare 502, 503 or 504) and a busy platform are tried again; a charged call carries an idempotency key, so a retry is
+ * never charged twice.
  */
 class Client
 {
     private const FREE = ['models', 'modules', 'codes', 'fonts', 'upload', 'upload_start', 'upload_status', 'upload_complete', 'upload_abort', 'poll', 'enhance_preview'];
 
     private const TRIES = 3;
+
+    private const UNREACHED = [502, 503, 504];
+
+    private const UNREACHED_WAITS = [2, 4, 8];
+
+    private const BUSY = [429, 529];
+
+    private const BUSY_TYPES = ['overloaded_error', 'rate_limit_error'];
 
     private const PART_RETRIES = 3;
 
@@ -181,8 +191,10 @@ class Client
     }
 
     /**
-     * One call, tried again on a dropped connection or a 429, 502, 503 or 529, waiting a little longer each time (and as
-     * long as Rekhu's retry-after asks, up to 5 seconds). Any other failure is the typed exception for it.
+     * One call. A dropped connection, or a 502, 503 or 504 without the platform's JSON error (it never reached the
+     * platform), is tried again up to 4 times in all, after 2, 4 and 8 seconds. A busy platform (429, 529, or a 5xx with
+     * overloaded_error or rate_limit_error) is tried again up to 3 times, as long as retry-after asks (up to 5 seconds).
+     * Any other failure is the typed exception for it.
      */
     private function send(callable $make): Response
     {
@@ -190,24 +202,40 @@ class Client
             try {
                 $response = $make();
             } catch (ConnectionException) {
-                if ($attempt >= self::TRIES) {
+                if ($attempt > count(self::UNREACHED_WAITS)) {
                     throw new Unavailable('Rekhu could not be reached; try again in a moment.', 503, 'connection_error');
                 }
-                usleep(250_000 * 2 ** $attempt);
+                Sleep::for(self::UNREACHED_WAITS[$attempt - 1])->seconds();
 
                 continue;
             }
             if ($response->successful()) {
                 return $response;
             }
-            if ($attempt < self::TRIES && in_array($response->status(), [429, 502, 503, 529], true)) {
+            $fromPlatform = $this->fromPlatform($response);
+            if (in_array($response->status(), self::UNREACHED, true) && ! $fromPlatform && $attempt <= count(self::UNREACHED_WAITS)) {
+                Sleep::for(self::UNREACHED_WAITS[$attempt - 1])->seconds();
+
+                continue;
+            }
+            $busy = in_array($response->status(), self::BUSY, true)
+                || ($response->status() >= 500 && in_array($response->json('error.type'), self::BUSY_TYPES, true));
+            if ($attempt < self::TRIES && $busy) {
                 $wait = min(5.0, (float) ($response->header('retry-after') ?: 0.25 * 2 ** $attempt));
-                usleep((int) ($wait * 1_000_000));
+                Sleep::usleep((int) ($wait * 1_000_000));
 
                 continue;
             }
             throw $this->failure($response);
         }
+    }
+
+    /** Whether a failed answer carries the platform's own JSON error, so the request reached it. */
+    private function fromPlatform(Response $response): bool
+    {
+        $message = $response->json('error.message');
+
+        return is_string($message) && $message !== '';
     }
 
     /** The typed exception for a refused answer, with the safety report when Rekhu gave one. */

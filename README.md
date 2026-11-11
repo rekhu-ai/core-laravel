@@ -210,23 +210,23 @@ Machines are sent as a **Rekhu machine profile**. Map your own machine records t
 ```php
 $machines = Rekhu::machines()->for($user);
 
-$found = $machines->identify('Heidelberg Speedmaster SM 74-4 with coater, 2009');
-// match: heidelberg-sm-74 (sure), details: 4 units, coater, 2009; questions when it could be another model
+$found = $machines->identify('Exampla Offset 74-4 with coater, 2009');
+// match: exampla-offset-74 (sure), details: 4 units, coater, 2009; questions when it could be another model
 
 $profile = $machines->profile($found['match']['id'], ['colour_units' => 4]);
 // every value with its source: given, library, typical (with the usual range)
 
-$check = $machines->check($machineAsProfile, 'heidelberg-sm-74', explain: true);
+$check = $machines->check($machineAsProfile, 'exampla-offset-74', explain: true);
 // findings: speed_above_model, sheet_above_model, gsm_outside_model, waste_unusual, missing_for_price, …
 // with explain: a summary and a text per finding in the user's language
 
 $choice = $machines->choose(
     ['width_mm' => 85, 'height_mm' => 55, 'quantity' => 5000, 'colours_front' => 4, 'colours_back' => 4, 'gsm' => 350],
-    [['ref' => 12, 'name' => 'SM 74-4', 'method' => 'offset', 'sheet_max_mm' => [530, 740], 'speed' => 15000, 'hourly_rate' => 140], …],
+    [['ref' => 12, 'name' => 'Offset 74-4', 'method' => 'offset', 'sheet_max_mm' => [530, 740], 'speed' => 15000, 'hourly_rate' => 140], …],
 );
 // the machines that can do it, cheapest (with hourly rates) or fastest first, each with why; the others with why not
 
-$machines->explain('Can I print 400 g/m² board on it, and what slows it down?', $machineAsProfile, 'heidelberg-sm-74');
+$machines->explain('Can I print 400 g/m² board on it, and what slows it down?', $machineAsProfile, 'exampla-offset-74');
 $machines->models();   // the library's models, for a picker (not charged)
 ```
 
@@ -270,7 +270,7 @@ Every refusal is a `Rekhu\Core\Exceptions\RekhuException` with `status` and `typ
 | `FileNotFound` | 404: a kept file is past its day or removed |
 | `InvalidRequest` | 422: refused before anything ran, with what was wrong; not charged |
 | `UnsafeFile` | 422 `refused_unsafe`: the file is not safe; `safety` has the report when Rekhu gave it |
-| `RateLimited`, `Unavailable` | 429, 502, 503: after the client tried again |
+| `RateLimited`, `Unavailable` | 429, or a 5xx: after the client tried again when the platform was unreachable |
 | `LimitReached` | your own limits (`scope` tenant or user) |
 
-A dropped connection, 429, 502 or 503 is tried again up to three times. Every charged call carries an `Idempotency-Key`, so a retry is never charged twice: Rekhu answers the first result again, with `meta.replayed`. In a queued job there is no signed-in user: name it with `->for($user)` or `->forTenant($id, $name)`.
+When the platform is briefly unreachable (a dropped connection, or a 502, 503 or 504 without Rekhu's own error), a call is tried again up to 4 times in all, after 2, 4 and 8 seconds. A busy Rekhu (429, 529, or a 5xx with `overloaded_error` or `rate_limit_error`) is tried again up to three times. Any other 5xx that carries Rekhu's own error is not tried again. Every charged call carries an `Idempotency-Key`, so a retry is never charged twice: Rekhu answers the first result again, with `meta.replayed`. In a queued job there is no signed-in user: name it with `->for($user)` or `->forTenant($id, $name)`.

@@ -18,13 +18,13 @@ use Rekhu\Core\Knowers\Seshat;
  *     Rekhu::limitsUsing(fn ($tenant, $knower) => $tenant['plan'] === 'basic' ? ['per_day_per_tenant' => 50] : []);
  *     Rekhu::priceUsing(fn ($tenant, $knower, $action, $meta) => 0.02);   // what you charge your customer for a call
  *
- *     Rekhu::machines()->identify('Heidelberg Speedmaster SM 74-4 with coater');
+ *     Rekhu::machines()->identify('Exampla Offset 74-4 with coater');
  *     Rekhu::machines()->for($user)->check($machine);
  *     Rekhu::seshat()->for($user)->check($request->file('artwork'), $order, explain: true);
  */
 class Rekhu
 {
-    public const VERSION = '0.9.0';
+    public const VERSION = '0.9.1';
 
     private static ?Closure $tenant = null;
 

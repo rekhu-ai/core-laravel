@@ -8,10 +8,12 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Rekhu\Core\Exceptions\FileNotFound;
 use Rekhu\Core\Exceptions\InvalidRequest;
 use Rekhu\Core\Exceptions\ModuleNotEnabled;
 use Rekhu\Core\Exceptions\RekhuException;
+use Rekhu\Core\Exceptions\Unavailable;
 use Rekhu\Core\Rekhu;
 use Rekhu\Core\Tests\TestCase;
 
@@ -143,15 +145,63 @@ final class SeshatTest extends TestCase
         $this->assertSame(0, DB::table('rekhu_usage')->count(), 'a refused call is not kept');
     }
 
-    public function test_a_busy_rekhu_is_tried_again_under_one_idempotency_key(): void
+    public function test_a_briefly_unreachable_platform_is_tried_again_under_one_idempotency_key(): void
     {
+        Sleep::fake();
         Http::fakeSequence('rekhu.test/v1/knowers/seshat/fix')
-            ->push(['type' => 'error', 'error' => ['type' => 'overloaded_error', 'message' => 'busy']], 503, ['retry-after' => '0'])
+            ->push('<html>Service Unavailable</html>', 503)
+            ->push('', 503)
             ->push($this->answer(['file_id' => 'f_3', 'applied' => [['fix' => 'add_bleed']]]));
         $this->assertSame('f_3', Rekhu::seshat()->for($this->user())->fix('f_1', [['fix' => 'add_bleed']])['file_id']);
         $keys = collect(Http::recorded())->map(fn ($pair) => $pair[0]->header('idempotency-key')[0] ?? null)->all();
-        $this->assertCount(2, $keys);
-        $this->assertSame($keys[0], $keys[1], 'the retry carries the same key, so it is never charged twice');
+        $this->assertCount(3, $keys);
+        $this->assertCount(1, array_unique($keys), 'every try carries the same key, so it is never charged twice');
+        Sleep::assertSequence([Sleep::for(2)->seconds(), Sleep::for(4)->seconds()]);
+    }
+
+    public function test_an_unreachable_platform_is_unavailable_after_four_tries(): void
+    {
+        Sleep::fake();
+        Http::fake(['rekhu.test/v1/knowers/seshat/codes' => Http::response('', 502)]);
+        try {
+            Rekhu::seshat()->for($this->user())->codes();
+            $this->fail('an unreachable platform is not an answer');
+        } catch (Unavailable $e) {
+            $this->assertSame(502, $e->status);
+        }
+        Http::assertSentCount(4);
+        Sleep::assertSequence([Sleep::for(2)->seconds(), Sleep::for(4)->seconds(), Sleep::for(8)->seconds()]);
+    }
+
+    public function test_a_503_with_the_platforms_own_error_fails_at_once(): void
+    {
+        Sleep::fake();
+        Http::fake(['rekhu.test/v1/knowers/seshat/fix' => Http::response(['type' => 'error', 'error' => ['type' => 'api_error', 'message' => 'the fix could not run']], 503)]);
+        try {
+            Rekhu::seshat()->for($this->user())->fix('f_1', [['fix' => 'add_bleed']]);
+            $this->fail('a refusal from the platform is not tried again');
+        } catch (Unavailable $e) {
+            $this->assertSame('the fix could not run', $e->getMessage());
+        }
+        Http::assertSentCount(1);
+        Sleep::assertNeverSlept();
+    }
+
+    public function test_a_busy_rekhu_is_tried_again_under_one_idempotency_key(): void
+    {
+        Sleep::fake();
+        Http::fakeSequence('rekhu.test/v1/knowers/seshat/fix')
+            ->push(['type' => 'error', 'error' => ['type' => 'overloaded_error', 'message' => 'busy']], 503, ['retry-after' => '1'])
+            ->push($this->answer(['file_id' => 'f_3', 'applied' => [['fix' => 'add_bleed']]]))
+            ->push('', 529, ['retry-after' => '1'])
+            ->push($this->answer(['file_id' => 'f_4', 'applied' => [['fix' => 'add_bleed']]]));
+        $this->assertSame('f_3', Rekhu::seshat()->for($this->user())->fix('f_1', [['fix' => 'add_bleed']])['file_id']);
+        $this->assertSame('f_4', Rekhu::seshat()->for($this->user())->fix('f_1', [['fix' => 'add_bleed']])['file_id']);
+        $keys = collect(Http::recorded())->map(fn ($pair) => $pair[0]->header('idempotency-key')[0] ?? null)->all();
+        $this->assertCount(4, $keys);
+        $this->assertSame($keys[0], $keys[1], 'the retry of the overloaded 503 carries the same key');
+        $this->assertSame($keys[2], $keys[3], 'the retry of the 529 carries the same key');
+        Sleep::assertSequence([Sleep::for(1)->seconds(), Sleep::for(1)->seconds()]);
     }
 
     public function test_a_kept_file_can_be_removed_and_the_codes_listed(): void
