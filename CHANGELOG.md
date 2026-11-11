@@ -7,6 +7,15 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.9.0 · 11 November 2026
+
+In parity with @rekhu/core 0.9.0 for Node.js.
+
+- **Files of any size, in parts:** `uploadInParts($file, $name, $progress)` sends a file of up to 10 GB in parts, read from disk one part at a time. A part that fails is sent again, up to three times. The answer is `file_id`, `name`, `bytes` and `safety`.
+- **Resume:** `resumeUpload($uploadId, $file)` finishes an upload that stopped halfway and sends only the parts that are missing. `abortUpload($uploadId)` drops one.
+- **By itself:** `upload`, `check`, `enhance`, `fillTemplate` and `textPositions` send a file larger than 20 MB in parts, then use its `file_id`. A large file for `check` is no longer sent as the request body. Smaller files go in one request as before. `check` also takes a `file_id`.
+- **Safety report:** every file is checked before Seshat works on it. Answers that take a file carry `safety`; an unsafe file throws the new `UnsafeFile` exception (`refused_unsafe`) with the report.
+
 ## 0.8.0 · 11 November 2026
 
 - **Centred templates:** `fillTemplate($template, $rows, ['align' => 'center'])` keeps the middle of each filled text, so names on a centred certificate stay centred; `'right'` keeps the end. `align` also works per row item (`['find' => …, 'replace' => …, 'align' => 'center']`) and on the `replace_text` fix.

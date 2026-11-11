@@ -18,7 +18,7 @@ No Rekhu account yet? [Create one](https://rekhu.com/register?ref=core-laravel):
 
 1. [Connecting](#connecting)
 2. [Tenants, languages, limits and your own prices](#tenants-languages-limits-and-your-own-prices)
-3. [Seshat: print files](#seshat-print-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
+3. [Seshat: print files](#seshat-print-files) · [Large files](#large-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
 4. [Rekhu Machines](#rekhu-machines)
 5. [Usage per tenant](#usage-per-tenant)
 6. [Where Rekhu runs](#where-rekhu-runs)
@@ -111,11 +111,41 @@ Rekhu::seshat()->fix($id, [
 
 New text goes in the file's own font when it has the letters, else the same font from the library, else `to`; otherwise it stays and `applied` names the missing letters. Text does not re-wrap: for a new paragraph, change it before the PDF is made.
 
-**Large files** are streamed from their path; `downloadTo($fileId, $path)` writes the result straight to disk. `remove($fileId)` deletes a kept file at once. File names keep every character (Müller, مرحبا).
+**Large files** are streamed from their path, and a file larger than 20 MB goes up in parts by itself (see [Large files](#large-files)); `downloadTo($fileId, $path)` writes the result straight to disk. `remove($fileId)` deletes a kept file at once. File names keep every character (Müller, مرحبا).
+
+**Every file is checked for safety** before Seshat works on it: a virus scan, what the file really is, and anything in it that could act on its own. The answer of `upload`, `check` and the other calls that take a file carries the report as `safety`. An unsafe file is refused with an `UnsafeFile` exception (422, `refused_unsafe`) that says why.
 
 **What it costs.** `meta.usage` has one line per charged item: the check (`seshat`) and, with `explain`, the explanation (`seshat_explain`, the model call). A refused call, or a fix with nothing to do, costs nothing.
 
 **Everything else, by task:** colour through a print profile, ink, black text, white overprint, spot colours, PDF/X, pages, merge, split, crop marks and pages as pictures are all on [rekhu.com/docs/seshat](https://rekhu.com/docs/seshat), each with what to send, what comes back and one call.
+
+## Large files
+
+A file of any size (up to 10 GB) goes up in parts of 32 MB or more. You do not have to do anything for it: `upload`, `check`, `enhance`, `fillTemplate` and `textPositions` send a file larger than 20 MB in parts by themselves, then work on it by its `file_id`. A smaller file still goes in one request.
+
+To send a file in parts yourself, for example to show how far it is:
+
+1. Call `uploadInParts()` with an upload, a path, or the bytes with a name:
+
+    ```php
+    $file = Rekhu::seshat()->uploadInParts($path, 'catalogue.pdf', function (int $sent, int $total, string $uploadId) {
+        cache()->put('upload:'.auth()->id(), ['id' => $uploadId, 'done' => $sent / $total]);
+    });
+    ```
+
+2. The file is read from disk one part at a time, so it is never whole in memory. A part that fails is sent again, up to three times.
+3. When all parts are in, Rekhu checks the file for safety. The method waits for that check (every 2 seconds, up to 30 minutes).
+4. You get `['file_id' => …, 'name' => …, 'bytes' => …, 'safety' => […]]`. Use the `file_id` with `check`, `fix`, `fillTemplate` and the rest: `Rekhu::seshat()->check($file['file_id'], $order)`.
+5. An unsafe file throws `UnsafeFile`; `$e->safety` has the report with the findings and why.
+
+**When the process stopped halfway** (a deploy, a dropped connection), Rekhu keeps the parts it has for 24 hours:
+
+1. Keep the `$uploadId` your progress function gets: it gets it once before the first part.
+2. Call `Rekhu::seshat()->resumeUpload($uploadId, $path)` with the same file.
+3. Only the parts Rekhu does not have yet are sent; then the file is checked and you get the same answer as from `uploadInParts()`.
+4. To drop an upload instead, call `Rekhu::seshat()->abortUpload($uploadId)`.
+
+The safety report: `verdict` (`clean`, `remove` or `refuse`), `virus` (`status`, and `signature` when one was found), `kind` (what the file really is) and `findings`, each with `code`, `decision` (`refuse`, `remove` or `note`) and `about`.
 
 ## Seshat AI: one picture improved (ai_enhance)
 
@@ -239,6 +269,7 @@ Every refusal is a `Rekhu\Core\Exceptions\RekhuException` with `status` and `typ
 | `AppPaused` | 402: the application is paused or at its monthly limit |
 | `FileNotFound` | 404: a kept file is past its day or removed |
 | `InvalidRequest` | 422: refused before anything ran, with what was wrong; not charged |
+| `UnsafeFile` | 422 `refused_unsafe`: the file is not safe; `safety` has the report when Rekhu gave it |
 | `RateLimited`, `Unavailable` | 429, 502, 503: after the client tried again |
 | `LimitReached` | your own limits (`scope` tenant or user) |
 

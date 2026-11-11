@@ -7,6 +7,7 @@ namespace Rekhu\Core\Knowers;
 use Illuminate\Http\UploadedFile;
 use Rekhu\Core\Client;
 use Rekhu\Core\Exceptions\RekhuException;
+use Rekhu\Core\Exceptions\UnsafeFile;
 
 /**
  * Seshat: knows print files. It checks a file against the order it is for, fixes what is safe, asks what the customer
@@ -23,9 +24,13 @@ use Rekhu\Core\Exceptions\RekhuException;
  *
  *     $result = Rekhu::seshat()->enhance($request->file('photo'), ['denoise', 'upscale'], ['ppi' => 300, 'width_mm' => 100, 'height_mm' => 70]);
  *     $result['status'] === 'queued' ? $job = $result['job_id'] : Storage::put('print/photo.png', Rekhu::seshat()->download($result['file_id']));
+ *
+ * A file larger than 20 MB goes up in parts by itself (see uploadInParts); every file is checked for safety.
  */
 class Seshat extends Knower
 {
+    public const IN_PARTS_FROM = 20 * 1024 * 1024;
+
     public function __construct(Client $client)
     {
         parent::__construct($client, 'seshat');
@@ -37,7 +42,16 @@ class Seshat extends Knower
      */
     public function check(UploadedFile|string $file, array $order = [], bool $explain = false, ?string $name = null): array
     {
-        return $this->call('check', array_filter(['order' => (object) $order, 'explain' => $explain ?: null]), $this->file($file, $name));
+        $input = array_filter(['order' => (object) $order, 'explain' => $explain ?: null]);
+        if (is_string($file) && preg_match('/^f_[a-z0-9]{24}$/', $file)) {
+            return $this->call('check', ['file_id' => $file] + $input);
+        }
+        $sent = $this->file($file, $name);
+        if ($this->size($sent) > self::IN_PARTS_FROM) {
+            return $this->call('check', ['file_id' => $this->sendInParts($sent)['file_id']] + $input);
+        }
+
+        return $this->call('check', $input, $sent);
     }
 
     /**
@@ -88,10 +102,58 @@ class Seshat extends Knower
         return $this->call('modules');
     }
 
-    /** A file kept by Rekhu for a day (a mask, a background picture, a picture to enhance later): its file_id. Not charged. */
+    /**
+     * A file kept by Rekhu for a day (a mask, a background picture, a picture to enhance later): its file_id and its
+     * safety report. A file larger than 20 MB goes up in parts. Not charged.
+     */
     public function upload(UploadedFile|string $file, ?string $name = null): array
     {
-        return $this->call('upload', [], $this->file($file, $name));
+        $sent = $this->file($file, $name);
+
+        return $this->size($sent) > self::IN_PARTS_FROM ? $this->sendInParts($sent) : $this->call('upload', [], $sent);
+    }
+
+    /**
+     * A file of any size (an upload, a path, or the bytes with a name) sent in parts, read from disk one part at a time,
+     * each part tried again up to three times; then checked for safety. $progress gets (bytes sent, total, upload_id),
+     * once before the first part and after each part: keep the upload_id to resume. Answers file_id, name, bytes and
+     * safety; an unsafe file throws UnsafeFile with the report. Not charged.
+     *
+     * @param  callable(int, int, string): void|null  $progress
+     */
+    public function uploadInParts(UploadedFile|string $file, ?string $name = null, ?callable $progress = null, int $timeoutSeconds = 1800, float $everySeconds = 2.0): array
+    {
+        return $this->sendInParts($this->file($file, $name), $progress, $timeoutSeconds, $everySeconds);
+    }
+
+    /**
+     * An upload in parts that stopped halfway (the process ended, the connection dropped), finished from the same file:
+     * only the parts Rekhu does not have yet are sent. The upload_id is the one uploadInParts gave to $progress; an
+     * upload is kept 24 hours. Answers as uploadInParts.
+     *
+     * @param  callable(int, int, string): void|null  $progress
+     */
+    public function resumeUpload(string $uploadId, UploadedFile|string $file, ?callable $progress = null, int $timeoutSeconds = 1800, float $everySeconds = 2.0): array
+    {
+        $status = $this->call('upload_status', ['upload_id' => $uploadId]);
+        if (($status['status'] ?? null) === 'open') {
+            $sent = $this->file($file, (string) ($status['name'] ?? 'file'));
+            if ($this->size($sent) !== (int) $status['bytes']) {
+                throw new RekhuException("This file is {$this->size($sent)} bytes; the upload {$uploadId} is for {$status['bytes']} bytes.", 0, 'invalid_request_error');
+            }
+            $this->sendParts($uploadId, $sent, (int) $status['part_size'], (int) $status['bytes'], array_map('intval', (array) $status['missing']), (int) ($status['bytes_received'] ?? 0), $progress);
+        }
+        if (in_array($status['status'] ?? null, ['open', 'scanning'], true)) {
+            return $this->finish($uploadId, $timeoutSeconds, $everySeconds);
+        }
+
+        return $this->ready($status);
+    }
+
+    /** An upload in parts dropped with the parts sent so far. Not charged. */
+    public function abortUpload(string $uploadId): array
+    {
+        return $this->call('upload_abort', ['upload_id' => $uploadId]);
     }
 
     /**
@@ -108,8 +170,12 @@ class Seshat extends Knower
         if (is_string($picture) && preg_match('/^f_[a-z0-9]{24}$/', $picture)) {
             return $this->call('enhance', $input + ['file_id' => $picture]);
         }
+        $sent = $this->file($picture, $extra['name'] ?? null);
+        if ($this->size($sent) > self::IN_PARTS_FROM) {
+            return $this->call('enhance', $input + ['file_id' => $this->sendInParts($sent)['file_id']]);
+        }
 
-        return $this->call('enhance', $input, $this->file($picture, $extra['name'] ?? null));
+        return $this->call('enhance', $input, $sent);
     }
 
     /** A small before / after picture of an enhanced file, as a data: URL: what the customer sees before taking it. */
@@ -231,6 +297,86 @@ class Seshat extends Knower
         }
 
         return $this->upload($file, $name)['file_id'];
+    }
+
+    /** The file sent in parts from the start: upload_start, every part, then the safety check. */
+    private function sendInParts(array $file, ?callable $progress = null, int $timeoutSeconds = 1800, float $everySeconds = 2.0): array
+    {
+        $total = $this->size($file);
+        $start = $this->call('upload_start', ['name' => $file['name'], 'bytes' => $total]);
+        $this->sendParts($start['upload_id'], $file, (int) $start['part_size'], $total, range(1, (int) $start['parts']), 0, $progress);
+
+        return $this->finish($start['upload_id'], $timeoutSeconds, $everySeconds);
+    }
+
+    /**
+     * The given parts, one at a time, each read from disk (or cut from the bytes) on its own, so a large file is never
+     * whole in memory.
+     *
+     * @param  list<int>  $parts
+     */
+    private function sendParts(string $uploadId, array $file, int $partSize, int $total, array $parts, int $sent, ?callable $progress): void
+    {
+        $handle = isset($file['path']) ? fopen($file['path'], 'rb') : null;
+        if ($handle === false) {
+            throw new RekhuException("The file {$file['path']} could not be read.", 0, 'invalid_request_error');
+        }
+        if ($progress) {
+            $progress($sent, $total, $uploadId);
+        }
+        try {
+            foreach ($parts as $n) {
+                $offset = ($n - 1) * $partSize;
+                $length = min($partSize, $total - $offset);
+                $bytes = $handle ? (string) stream_get_contents($handle, $length, $offset) : substr($file['bytes'], $offset, $length);
+                $this->client->putPart('seshat', $uploadId, $n, $bytes, $this->user, $this->tenant);
+                $sent += $length;
+                if ($progress) {
+                    $progress($sent, $total, $uploadId);
+                }
+            }
+        } finally {
+            if ($handle) {
+                fclose($handle);
+            }
+        }
+    }
+
+    /** The upload put together and checked for safety, polled until it is ready, refused or failed. */
+    private function finish(string $uploadId, int $timeoutSeconds, float $everySeconds): array
+    {
+        $status = $this->call('upload_complete', ['upload_id' => $uploadId]);
+        $until = time() + $timeoutSeconds;
+        while (($status['status'] ?? null) === 'scanning') {
+            if (time() > $until) {
+                throw new RekhuException("The upload {$uploadId} is still being checked; call resumeUpload() later.", 0, 'timeout');
+            }
+            usleep((int) ($everySeconds * 1_000_000));
+            $status = $this->call('upload_status', ['upload_id' => $uploadId]);
+        }
+
+        return $this->ready($status);
+    }
+
+    /** A finished upload as file_id, name, bytes and safety; refused or failed as the exception for it. */
+    private function ready(array $status): array
+    {
+        if (($status['status'] ?? null) === 'ready') {
+            return ['file_id' => $status['file_id'], 'name' => $status['name'] ?? null, 'bytes' => $status['bytes'] ?? null, 'safety' => $status['safety'] ?? null];
+        }
+        if (($status['status'] ?? null) === 'refused') {
+            $why = array_column(array_filter((array) ($status['safety']['findings'] ?? []), fn ($f) => ($f['decision'] ?? null) === 'refuse'), 'about');
+
+            throw new UnsafeFile('The file is not taken: '.($why ? implode('; ', $why) : 'it is not safe').'.', 422, 'refused_unsafe', $status['safety'] ?? null);
+        }
+
+        throw new RekhuException((string) ($status['error'] ?? 'The upload is '.($status['status'] ?? 'unknown').'.'), 0, 'upload_failed');
+    }
+
+    /** The size of a file as path or bytes. */
+    private function size(array $file): int
+    {
+        return isset($file['path']) ? (int) filesize($file['path']) : strlen((string) $file['bytes']);
     }
 
     private function file(UploadedFile|string $file, ?string $name): array

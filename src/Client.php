@@ -25,9 +25,11 @@ use Rekhu\Core\Exceptions\Unavailable;
  */
 class Client
 {
-    private const FREE = ['models', 'modules', 'codes', 'fonts', 'upload', 'poll', 'enhance_preview'];
+    private const FREE = ['models', 'modules', 'codes', 'fonts', 'upload', 'upload_start', 'upload_status', 'upload_complete', 'upload_abort', 'poll', 'enhance_preview'];
 
     private const TRIES = 3;
+
+    private const PART_RETRIES = 3;
 
     /**
      * @param  array{id: string, name: string}|null  $tenant  a tenant named directly (a queued job without a user)
@@ -102,6 +104,30 @@ class Client
     public function remove(string $knower, string $fileId, ?Authenticatable $user = null, ?array $tenant = null): void
     {
         $this->send(fn () => $this->request($this->filesHeaders($user, $tenant))->delete("/v1/knowers/{$knower}/files/{$fileId}"));
+    }
+
+    /**
+     * One part of an upload in parts, as the request body: what is in so far. A dropped connection, 408, 429 or a
+     * failure on Rekhu's side is tried again up to three times; sending a part again replaces it.
+     */
+    public function putPart(string $knower, string $uploadId, int $part, string $bytes, ?Authenticatable $user = null, ?array $tenant = null): array
+    {
+        $headers = $this->filesHeaders($user, $tenant);
+        for ($attempt = 0; ; $attempt++) {
+            try {
+                $response = $this->request($headers)->withBody($bytes, 'application/octet-stream')->put("/v1/knowers/{$knower}/uploads/".rawurlencode($uploadId)."/parts/{$part}");
+            } catch (ConnectionException) {
+                $response = null;
+            }
+            if ($response?->successful()) {
+                return (array) $response->json();
+            }
+            $again = ! $response || in_array($response->status(), [408, 429], true) || $response->status() >= 500;
+            if (! $again || $attempt >= self::PART_RETRIES) {
+                throw $response ? $this->failure($response) : new Unavailable("Part {$part} could not be sent; resume the upload in a moment.", 503, 'connection_error');
+            }
+            usleep(250_000 * 2 ** $attempt);
+        }
     }
 
     /** What the app's user did with an answer: what the knower learns from. Feedback is not charged. */
@@ -180,8 +206,16 @@ class Client
 
                 continue;
             }
-            throw RekhuException::from($response->status(), (string) ($response->json('error.type') ?: 'api_error'), (string) ($response->json('error.message') ?: "Rekhu answered {$response->status()}"));
+            throw $this->failure($response);
         }
+    }
+
+    /** The typed exception for a refused answer, with the safety report when Rekhu gave one. */
+    private function failure(Response $response): RekhuException
+    {
+        $safety = $response->json('error.safety');
+
+        return RekhuException::from($response->status(), (string) ($response->json('error.type') ?: 'api_error'), (string) ($response->json('error.message') ?: "Rekhu answered {$response->status()}"), is_array($safety) ? $safety : null);
     }
 
     /** The app's own limits a day, counted in its ledger: per tenant and per user. */

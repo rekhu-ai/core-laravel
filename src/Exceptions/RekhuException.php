@@ -15,8 +15,11 @@ class RekhuException extends RuntimeException
     }
 
     /** The typed exception for an answer from Rekhu: catch the one you handle, or this class for all of them. */
-    public static function from(int $status, string $type, string $message): self
+    public static function from(int $status, string $type, string $message, ?array $safety = null): self
     {
+        if ($type === 'refused_unsafe') {
+            return new UnsafeFile($message, $status, $type, $safety);
+        }
         $class = match (true) {
             $status === 401 => InvalidKey::class,
             $type === 'module_not_enabled' => ModuleNotEnabled::class,
