@@ -142,6 +142,7 @@ class Seshat extends Knower
      * template is an upload, a path, bytes with a name, or a file_id; long lists go in steps of 1000 by themselves.
      * Answers the job ['status' => 'queued', 'job_id' => …]: waitFor() it for the files (a ZIP or a merged PDF per 250
      * copies) and a report per row. options: output ('zip' | 'merged'), name_by (the find whose value names each file),
+     * align ('left' | 'center' | 'right': keep the start, middle or end of each filled text, for centred certificates),
      * webhook_url, name. Charged per copy in which something was replaced.
      */
     public function fillTemplate(UploadedFile|string $template, array $rows, array $options = []): array
@@ -154,7 +155,7 @@ class Seshat extends Knower
         foreach (array_chunk(array_values($rows), 1000) as $i => $chunk) {
             $last = ($i + 1) * 1000 >= count($rows);
             $input = ['rows' => $chunk]
-                + ($job ? ['job_id' => $job['job_id']] : array_filter(['file_id' => $fileId, 'output' => $options['output'] ?? 'zip', 'name_by' => $options['name_by'] ?? null]))
+                + ($job ? ['job_id' => $job['job_id']] : array_filter(['file_id' => $fileId, 'output' => $options['output'] ?? 'zip', 'name_by' => $options['name_by'] ?? null, 'align' => $options['align'] ?? null]))
                 + ($last ? array_filter(['webhook_url' => $options['webhook_url'] ?? null]) : ['more' => true]);
             $job = $this->call('fill_template', $input);
         }

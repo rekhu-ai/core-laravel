@@ -59,10 +59,12 @@ final class SeshatTest extends TestCase
             'rekhu.test/v1/knowers/seshat/text_positions' => Http::response(['found' => [['find' => '[name]', 'page' => 1, 'font' => 'Helvetica', 'size' => 14]]]),
         ]);
         $rows = array_map(fn ($i) => ['[name]' => "Student {$i}"], range(1, 2500));
-        Rekhu::seshat()->fillTemplate("%PDF-1.7\ntemplate", $rows, ['name' => 'certificate.pdf', 'name_by' => '[name]', 'webhook_url' => 'https://shop.test/hook']);
+        Rekhu::seshat()->fillTemplate("%PDF-1.7\ntemplate", $rows, ['name' => 'certificate.pdf', 'name_by' => '[name]', 'align' => 'center', 'webhook_url' => 'https://shop.test/hook']);
         $fills = collect(Http::recorded())->map(fn ($pair) => $pair[0])->filter(fn (Request $r) => str_ends_with($r->url(), '/fill_template'))->map(fn (Request $r) => json_decode($r->body(), true))->values();
         $this->assertSame([[1000, $id, true, null], [1000, 'j_9', true, null], [500, 'j_9', false, 'https://shop.test/hook']], $fills->map(fn ($f) => [count($f['rows']), $f['file_id'] ?? $f['job_id'], (bool) ($f['more'] ?? false), $f['webhook_url'] ?? null])->all());
         $this->assertSame('[name]', $fills[0]['name_by']);
+        $this->assertSame('center', $fills[0]['align']);
+        $this->assertArrayNotHasKey('align', $fills[1]);
         Http::assertSentCount(4);
         $this->assertSame('done', Rekhu::seshat()->waitFor('j_9', 5, 0.01)['status']);
         $this->assertSame('Helvetica', Rekhu::seshat()->textPositions($id, ['[name]'])['found'][0]['font']);

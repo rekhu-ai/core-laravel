@@ -7,6 +7,10 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.8.0 · 11 November 2026
+
+- **Centred templates:** `fillTemplate($template, $rows, ['align' => 'center'])` keeps the middle of each filled text, so names on a centred certificate stay centred; `'right'` keeps the end. `align` also works per row item (`['find' => …, 'replace' => …, 'align' => 'center']`) and on the `replace_text` fix.
+
 ## 0.7.0 · 10 November 2026
 
 - **Templates filled per row:** `fillTemplate($template, $rows, $options)` makes a copy of a PDF template per row (`['[name]' => 'Sara', '[grade]' => 'A']`, or lists of `find` / `replace`). The template is uploaded once and long lists go in steps of 1000 by themselves; the job gives a ZIP of one PDF per row, or a merged PDF, per 250 copies, and a report per row (replaced, not found, missing letters). `output`, `name_by` (name each file by a placeholder's value) and `webhook_url`. Charged per copy.
