@@ -235,4 +235,26 @@ final class SeshatTest extends TestCase
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/render') && $r['format'] === 'jpg' && $r['dpi'] === 72);
         $this->assertSame(3, DB::table('rekhu_usage')->count(), 'merge, split and render are charged and kept in the ledger');
     }
+
+    public function test_recipes_plates_versions_compared_and_the_customer_report(): void
+    {
+        Http::fake(['rekhu.test/v1/knowers/seshat/*' => Http::response($this->answer(['ok' => true]))]);
+        $s = Rekhu::seshat();
+        $s->saveRecipe('A5 flyer', ['preset' => 'sheetfed_offset', 'width_mm' => 148, 'height_mm' => 210], 'auto');
+        $s->fix('f_1', recipe: 'A5 flyer');
+        $s->fix('f_1');
+        $s->plates('f_1', 2, profile: 'fogra51');
+        $s->compareFiles('f_2', 'f_1');
+        $s->report('f_1', recipe: 'A5 flyer', language: 'nl', texts: ['rgb_colours' => 'Uw bestand bevat RGB.']);
+        $s->recipes();
+        $s->deleteRecipe('A5 flyer');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/recipe_save') && $r['order']['preset'] === 'sheetfed_offset' && $r['fixes'] === 'auto');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/fix') && ($r->data()['recipe'] ?? null) === 'A5 flyer' && ! array_key_exists('fixes', $r->data()));
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/fix') && ! array_key_exists('recipe', $r->data()) && ($r->data()['fixes'] ?? null) === 'auto');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/plates') && $r['page'] === 2 && $r['profile'] === 'fogra51');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/compare_files') && $r['against_file_id'] === 'f_1');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/report') && $r['language'] === 'nl' && $r['texts']['rgb_colours'] === 'Uw bestand bevat RGB.');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/recipe_delete') && $r['name'] === 'A5 flyer');
+        $this->assertSame(5, DB::table('rekhu_usage')->count(), 'the two fixes, plates, compare and report are charged; recipes are not');
+    }
 }

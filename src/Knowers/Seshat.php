@@ -40,9 +40,9 @@ class Seshat extends Knower
      * A print file (an upload, a path, or the bytes with a name) against its order: findings, each with Seshat's
      * decision (fix, ask, refuse, note); explain adds a summary and a text per finding for the customer.
      */
-    public function check(UploadedFile|string $file, array $order = [], bool $explain = false, ?string $name = null): array
+    public function check(UploadedFile|string $file, array $order = [], bool $explain = false, ?string $name = null, ?string $recipe = null): array
     {
-        $input = array_filter(['order' => (object) $order, 'explain' => $explain ?: null]);
+        $input = array_filter(['order' => (object) $order, 'explain' => $explain ?: null, 'recipe' => $recipe]);
         if (is_string($file) && preg_match('/^f_[a-z0-9]{24}$/', $file)) {
             return $this->call('check', ['file_id' => $file] + $input);
         }
@@ -59,9 +59,50 @@ class Seshat extends Knower
      * [['fix' => 'scale_to_size', 'option' => 'fit'], ['fix' => 'add_bleed']]. Answers the new file_id, what was done
      * and the check of the fixed file.
      */
-    public function fix(string $fileId, string|array $fixes = 'auto', array $order = []): array
+    public function fix(string $fileId, string|array|null $fixes = null, array $order = [], ?string $recipe = null): array
     {
-        return $this->call('fix', ['file_id' => $fileId, 'fixes' => $fixes, 'order' => (object) $order]);
+        $fixes ??= $recipe === null ? 'auto' : null;
+
+        return $this->call('fix', array_filter(['file_id' => $fileId, 'fixes' => $fixes, 'order' => (object) $order, 'recipe' => $recipe], fn ($v) => $v !== null));
+    }
+
+    /** A page separated: every plate (CMYK and spot colours) with its ink coverage, and a proof with overprint through the profile. */
+    public function plates(string $fileId, int $page = 1, int $dpi = 100, ?string $profile = null): array
+    {
+        return $this->call('plates', array_filter(['file_id' => $fileId, 'page' => $page, 'dpi' => $dpi, 'profile' => $profile]));
+    }
+
+    /** What changed from an earlier version to this one: words, areas, colours and fonts, with marked pictures. */
+    public function compareFiles(string $fileId, string $againstFileId): array
+    {
+        return $this->call('compare_files', ['file_id' => $fileId, 'against_file_id' => $againstFileId]);
+    }
+
+    /**
+     * The check as a PDF report for the customer, every problem marked on its page, kept as a file.
+     *
+     * @param  array<string, string>  $texts  a finding code => your own sentence for it
+     */
+    public function report(string $fileId, array $order = [], ?string $recipe = null, string $language = 'en', array $texts = []): array
+    {
+        return $this->call('report', array_filter(['file_id' => $fileId, 'order' => $order ? (object) $order : null, 'recipe' => $recipe, 'language' => $language, 'texts' => $texts ? (object) $texts : null]));
+    }
+
+    /** A product's order (on a preset or not) and fixes kept by name; check, fix and report take the recipe's name. Not charged. */
+    public function saveRecipe(string $name, array $order = [], string|array|null $fixes = null): array
+    {
+        return $this->call('recipe_save', array_filter(['name' => $name, 'order' => (object) $order, 'fixes' => $fixes], fn ($v) => $v !== null));
+    }
+
+    /** The account's recipes, and the presets to build them on. Not charged. */
+    public function recipes(): array
+    {
+        return $this->call('recipe_list');
+    }
+
+    public function deleteRecipe(string $name): array
+    {
+        return $this->call('recipe_delete', ['name' => $name]);
     }
 
     /** A page as a PNG (a data: URL) with its trim, bleed and safe zone drawn: a proof to show the customer. */

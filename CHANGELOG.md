@@ -7,6 +7,13 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.10.0 · 12 November 2026
+
+In parity with @rekhu/core 0.10.0 for Node.js. For Seshat 1.8.
+
+- **Plates, versions and the customer report.** `plates($fileId, $page, $dpi, $profile)`, `compareFiles($fileId, $againstFileId)`, `report($fileId, $order, $recipe, $language, $texts)`, `saveRecipe($name, $order, $fixes)`, `recipes()` and `deleteRecipe($name)`.
+- **Recipes per product.** `check(..., recipe: 'A5 flyer')` and `fix($fileId, recipe: 'A5 flyer')` take a recipe's name; `fix` without fixes and without a recipe still fixes `'auto'`. Saving, listing and removing recipes is free and not counted against your limits.
+
 ## 0.9.1 · 11 November 2026
 
 In parity with @rekhu/core 0.9.1 for Node.js.
