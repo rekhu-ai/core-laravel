@@ -36,7 +36,7 @@ final class SeshatRoutesTest extends TestCase
             'rekhu.test/v1/knowers/seshat/check' => Http::response(['file_id' => self::FILE, 'status' => 'warning', 'file' => ['pages' => 2],
                 'findings' => [['code' => 'bleed_missing', 'decision' => 'fix', 'fix' => 'add_bleed', 'pages' => [1]], ['code' => 'resolution_low', 'decision' => 'ask', 'pages' => [2]]],
                 'explanation' => ['summary' => 'One thing to fix.'], 'meta' => ['cost_usd' => 0.05]]),
-            'rekhu.test/v1/knowers/seshat/codes' => Http::response(['codes' => ['bleed_missing' => ['about' => 'the page has no bleed'], 'resolution_low' => ['about' => 'a picture is coarse']], 'fixes' => ['add_bleed' => ['about' => 'adds bleed by mirroring the page edges']]]),
+            'rekhu.test/v1/knowers/seshat/codes' => Http::response(['codes' => ['bleed_missing' => ['about' => 'the page has no bleed'], 'resolution_low' => ['about' => 'a picture is coarse']], 'fixes' => ['add_bleed' => ['about' => 'adds bleed by mirroring the page edges']], 'texts' => ['en' => ['bleed_missing' => 'The page has no bleed'], 'nl' => ['bleed_missing' => 'De pagina heeft geen afloop', 'resolution_low' => 'Afbeeldingen zijn wat klein']]]),
             'rekhu.test/v1/knowers/seshat/preview' => Http::response(['file_id' => self::FILE, 'image' => 'data:image/png;base64,'.base64_encode('PNGDATA')]),
             'rekhu.test/v1/knowers/seshat/fix' => Http::response(['file_id' => self::FIXED, 'from_file_id' => self::FILE, 'name' => 'flyer-print.pdf',
                 'applied' => [['fix' => 'add_bleed', 'changed' => true], ['side_effect' => 'x resolved', 'resolved' => 'x']],
@@ -56,7 +56,7 @@ final class SeshatRoutesTest extends TestCase
     {
         $this->upload(['width_mm' => 148, 'height_mm' => '210', 'min_ppi' => 300, 'evil' => 'x'])
             ->assertOk()->assertJsonPath('protocol', 1)->assertJsonPath('file_id', self::FILE)->assertJsonPath('pages', 2)
-            ->assertJsonPath('findings.0', ['code' => 'bleed_missing', 'decision' => 'fix', 'about' => 'the page has no bleed', 'fix' => 'add_bleed', 'pages' => [1]])
+            ->assertJsonPath('findings.0', ['code' => 'bleed_missing', 'decision' => 'fix', 'about' => 'De pagina heeft geen afloop', 'fix' => 'add_bleed', 'pages' => [1]])
             ->assertJsonPath('explanation.summary', 'One thing to fix.')->assertJsonMissingPath('meta');
         Http::assertSent(function ($request) {
             if (! str_ends_with($request->url(), '/seshat/check')) {
@@ -70,10 +70,10 @@ final class SeshatRoutesTest extends TestCase
 
     public function test_fix_makes_all_or_the_chosen_allowed_fixes_and_answers_the_check_of_the_fixed_file(): void
     {
-        $this->withHeaders(self::P)->postJson('/rekhu/seshat/fix', ['file_id' => self::FILE, 'specs' => ['width_mm' => 148, 'height_mm' => 210]])
+        $this->withHeaders(self::P)->postJson('/rekhu/seshat/fix', ['file_id' => self::FILE, 'specs' => ['width_mm' => 148, 'height_mm' => 210], 'locale' => 'nl'])
             ->assertOk()->assertJsonPath('file_id', self::FIXED)->assertJsonPath('fixed_from', self::FILE)
             ->assertJsonPath('applied', [['fix' => 'add_bleed', 'about' => 'adds bleed by mirroring the page edges']])
-            ->assertJsonPath('check.findings', [['code' => 'resolution_low', 'decision' => 'ask', 'about' => 'a picture is coarse', 'pages' => [2]]]);
+            ->assertJsonPath('check.findings', [['code' => 'resolution_low', 'decision' => 'ask', 'about' => 'Afbeeldingen zijn wat klein', 'pages' => [2]]]);
         Http::assertSent(fn ($r) => str_ends_with($r->url(), '/seshat/fix') && $r->data()['fixes'] === 'auto');
 
         $this->withHeaders(self::P)->postJson('/strict/rekhu/seshat/fix', ['file_id' => self::FILE])->assertStatus(422);
@@ -110,6 +110,16 @@ final class SeshatRoutesTest extends TestCase
         $this->assertStringNotContainsString('acme', (string) $response->getContent());
         auth()->forgetGuards();
         $this->upload()->assertStatus(401);
+    }
+
+    public function test_a_finding_reads_in_the_language_sent_else_the_browsers_else_english(): void
+    {
+        $about = fn (?string $locale, ?string $header) => collect($this->withHeaders(self::P + ($header ? ['Accept-Language' => $header] : []))->post('/rekhu/seshat/check', array_filter([
+            'file' => UploadedFile::fake()->createWithContent('a.pdf', '%PDF'), 'specs' => json_encode(['width_mm' => 148, 'height_mm' => 210]), 'locale' => $locale,
+        ]))->json('findings'))->pluck('about')->all();
+        $this->assertSame(['The page has no bleed', 'a picture is coarse'], $about('de-DE', null));
+        $this->flushHeaders();
+        $this->assertSame(['De pagina heeft geen afloop', 'Afbeeldingen zijn wat klein'], $about(null, 'nl-NL,nl;q=0.9'));
     }
 
     public function test_specs_from_a_browser_keep_only_the_fields_of_the_specs(): void

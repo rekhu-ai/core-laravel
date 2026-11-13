@@ -59,7 +59,7 @@ Request, `multipart/form-data`:
 |---|---|
 | `file` | the print file: PDF, EPS, ZIP or a picture; at most the server's limit (`413` above it) |
 | `specs` | the specs as JSON |
-| `locale` | optional: the language the explanation is written in (BCP 47, for example `nl-NL`) |
+| `locale` | optional: the language the person reads (BCP 47, for example `nl-NL`): of the findings' sentences and the explanation. Absent: the browser's `Accept-Language`, else English |
 | `explain` | optional: `0` for no explanation; on by default |
 | `recipe` | optional: the name of a recipe kept in the Rekhu account (its specs and fixes, set once per product); the specs sent here go on top of it. Only when the server package allows recipes |
 
@@ -74,8 +74,8 @@ Answer `200`, JSON:
   "specs": { "width_mm": 148, "height_mm": 210, "bleed_mm": 3 },
   "status": "warning",
   "findings": [
-    { "code": "bleed_missing", "decision": "fix", "about": "the page has no bleed", "fix": "add_bleed", "pages": [1] },
-    { "code": "resolution_low", "decision": "ask", "about": "pictures are far too small for the ordered size", "pages": [1] }
+    { "code": "bleed_missing", "decision": "fix", "about": "The page has no bleed", "fix": "add_bleed", "pages": [1] },
+    { "code": "resolution_low", "decision": "ask", "about": "Pictures are a little small for this size and may print soft", "pages": [1] }
   ],
   "explanation": {
     "summary": "Your flyer is nearly ready …",
@@ -88,7 +88,7 @@ Answer `200`, JSON:
 |---|---|
 | `file_id` | the checked file, kept by Rekhu for 24 hours; send it to `fix`, `preview` and `files` |
 | `status` | `ok`, `warning` or `error`: Seshat's verdict on the whole file |
-| `findings[]` | each problem: `code`, `decision`, `about` (the sentence for the code), `fix` (the fix Seshat will make, for `decision: fix`), `pages`, and `file` for a file inside a ZIP |
+| `findings[]` | each problem: `code`, `decision`, `about` (the sentence for the person, in their language: English, Dutch, German, French or Arabic, else English), `fix` (the fix Seshat will make, for `decision: fix`), `pages`, and `file` for a file inside a ZIP |
 | `explanation` | for the person who sent the file, in their language: a `summary`, and per finding a `text` and, for `ask`, a `question`. `null` when it is off or could not be written; the findings are complete either way |
 
 The decisions:
@@ -105,7 +105,7 @@ The decisions:
 Request, JSON:
 
 ```json
-{ "file_id": "f_…", "specs": { … }, "fixes": ["add_bleed", "convert_cmyk"], "recipe": null }
+{ "file_id": "f_…", "specs": { … }, "fixes": ["add_bleed", "convert_cmyk"], "recipe": null, "locale": "nl-NL" }
 ```
 
 | Field | |
@@ -114,6 +114,7 @@ Request, JSON:
 | `specs` | the same specs as the check |
 | `fixes` | optional: the fixes to make, by name, from the check's `fix` fields (the person may have chosen some). Absent: every fix Seshat decided on. The server package keeps only the fixes its configuration allows; an empty list makes nothing |
 | `recipe` | optional: the same recipe as the check |
+| `locale` | optional: the language of the check of the fixed file's sentences, as for the check |
 
 The fixes are made, and the fixed file is then checked again against the same specs.
 
@@ -166,4 +167,4 @@ Every error is JSON, `{ "error": { "type": "…", "message": "…" } }`. Show `m
 
 ## Changes
 
-- **1** (November 2026): check, fix with verification (all or chosen fixes), recipes, preview, download.
+- **1** (November 2026): check, fix with verification (all or chosen fixes), recipes, preview, download. Since widget 0.15.0 and core 0.15.0: the findings' sentences in the person's language, and `locale` on `fix`.

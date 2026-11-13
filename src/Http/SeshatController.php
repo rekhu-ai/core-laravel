@@ -74,14 +74,14 @@ class SeshatController extends Controller
             if (! $recipe && (empty($specs['width_mm']) || empty($specs['height_mm']))) {
                 return self::error(400, 'invalid_request_error', 'The specs need width_mm and height_mm.');
             }
-            $language = strtolower(substr((string) $request->input('locale', ''), 0, 2)) ?: null;
+            $language = $this->language($request);
             $explain = $config['explain'] && $request->input('explain') !== '0';
             $result = $this->seshat($request)->check($file, $specs, $explain, $file->getClientOriginalName(), $recipe, $language);
             $about = $this->catalogue($request);
 
             return response()->json([
                 'protocol' => 1, 'file_id' => $result['file_id'] ?? null, 'name' => $file->getClientOriginalName(), 'pages' => $result['file']['pages'] ?? null,
-                'specs' => (object) $specs, 'status' => $result['status'] ?? null, 'findings' => $this->findings($result, $about), 'explanation' => $result['explanation'] ?? null,
+                'specs' => (object) $specs, 'status' => $result['status'] ?? null, 'findings' => $this->findings($result, $about, $language), 'explanation' => $result['explanation'] ?? null,
             ], 200, ['Cache-Control' => 'no-store']);
         });
     }
@@ -110,7 +110,7 @@ class SeshatController extends Controller
             $applied = collect((array) ($fixed['applied'] ?? []))
                 ->filter(fn ($a) => ! empty($a['fix']) && empty($a['side_effect']) && ($a['changed'] ?? true) !== false && ! in_array($a['result'] ?? null, ['not_found', 'not_set'], true))
                 ->map(fn ($a) => ['fix' => $a['fix'], 'about' => $about['fixes'][$a['fix']]['about'] ?? $a['fix']])->values();
-            $check = isset($fixed['check']) ? ['status' => $fixed['check']['status'] ?? null, 'pages' => $fixed['check']['file']['pages'] ?? null, 'findings' => $this->findings((array) $fixed['check'], $about)] : null;
+            $check = isset($fixed['check']) ? ['status' => $fixed['check']['status'] ?? null, 'pages' => $fixed['check']['file']['pages'] ?? null, 'findings' => $this->findings((array) $fixed['check'], $about, $this->language($request))] : null;
 
             return response()->json([
                 'protocol' => 1, 'file_id' => $fixed['file_id'] ?? $fileId, 'name' => $fixed['name'] ?? null, 'fixed_from' => $fixed['from_file_id'] ?? $fileId,
@@ -173,8 +173,14 @@ class SeshatController extends Controller
         return is_array($config['fixes']) ? array_values(array_intersect($names, $config['fixes'])) : $names;
     }
 
-    /** The findings of a check, of a ZIP's files too, each with the sentence for its code. */
-    private function findings(array $result, array $about): array
+    /** The language of a request: the locale it sent, else the browser's first, as two letters. */
+    private function language(Request $request): string
+    {
+        return strtolower(substr((string) ($request->input('locale') ?: $request->header('Accept-Language', 'en')), 0, 2)) ?: 'en';
+    }
+
+    /** The findings of a check, of a ZIP's files too, each with its sentence in the person's language (else English). */
+    private function findings(array $result, array $about, string $language): array
     {
         $raw = $result['findings'] ?? [];
         if (! $raw) {
@@ -186,7 +192,7 @@ class SeshatController extends Controller
         }
 
         return array_map(fn ($f) => array_filter([
-            'code' => $f['code'] ?? null, 'decision' => $f['decision'] ?? null, 'about' => $about['codes'][$f['code'] ?? '']['about'] ?? ($f['about'] ?? $f['code'] ?? null),
+            'code' => $f['code'] ?? null, 'decision' => $f['decision'] ?? null, 'about' => $about['texts'][$language][$f['code'] ?? ''] ?? $about['texts']['en'][$f['code'] ?? ''] ?? $about['codes'][$f['code'] ?? '']['about'] ?? ($f['about'] ?? $f['code'] ?? null),
             'fix' => $f['fix'] ?? null, 'pages' => $f['pages'] ?? null, 'file' => $f['file'] ?? null,
         ], fn ($v) => $v !== null), $raw);
     }
@@ -194,10 +200,10 @@ class SeshatController extends Controller
     /** The sentence per finding code and per fix, kept for a day. */
     private function catalogue(Request $request): array
     {
-        return cache()->remember('rekhu.seshat.catalogue', 86400, function () use ($request) {
+        return cache()->remember('rekhu.seshat.catalogue.2', 86400, function () use ($request) {
             $list = $this->seshat($request)->codes();
 
-            return ['codes' => (array) ($list['codes'] ?? []), 'fixes' => (array) ($list['fixes'] ?? [])];
+            return ['codes' => (array) ($list['codes'] ?? []), 'fixes' => (array) ($list['fixes'] ?? []), 'texts' => (array) ($list['texts'] ?? [])];
         });
     }
 

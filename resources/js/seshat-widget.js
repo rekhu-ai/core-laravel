@@ -1,4 +1,4 @@
-/*! @rekhu/seshat-widget 0.14.0 · https://rekhu.com · generated from src/index.js, do not edit */
+/*! @rekhu/seshat-widget 0.15.0 · https://rekhu.com · generated from src/index.js, do not edit */
 (() => {
 // @rekhu/seshat-widget: the file check on your own site. A print file and its specs go to your back end (a Rekhu server
 // package, protocol 1 in PROTOCOL.md); the person sees the findings and a proof of each page, asks for the fixes, sees
@@ -122,8 +122,8 @@ function createClient(options = {}) {
         },
 
         /** POST /fix: all fixes Seshat decided on, or the named ones; the answer carries the check of the fixed file. */
-        async fix(fileId, { specs = {}, fixes = null, recipe = null } = {}) {
-            const body = { file_id: fileId, specs, ...(Array.isArray(fixes) ? { fixes } : {}), ...(recipe ? { recipe } : {}) };
+        async fix(fileId, { specs = {}, fixes = null, recipe = null, locale = null } = {}) {
+            const body = { file_id: fileId, specs, ...(Array.isArray(fixes) ? { fixes } : {}), ...(recipe ? { recipe } : {}), ...(locale ? { locale } : {}) };
             return json(await fetch(`${base}/fix`, { method: 'POST', headers: await headers({ 'content-type': 'application/json' }), body: JSON.stringify(body), credentials }));
         },
 
@@ -217,7 +217,7 @@ function createFlow(options = {}) {
             set({ step: 'fixing', error: null });
             try {
                 const fixes = config.fix === 'choose' ? state.chosen : null;
-                const fixed = await client.fix(state.check.file_id, { specs: config.specs, recipe: config.recipe, fixes });
+                const fixed = await client.fix(state.check.file_id, { specs: config.specs, recipe: config.recipe, fixes, locale: config.locale });
                 if (mine !== run) return null;
                 set({ step: 'fixed', fixed });
                 emit('fixed', fixed);

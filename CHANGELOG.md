@@ -7,6 +7,12 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.15.0 · 13 November 2026
+
+In parity with @rekhu/core 0.15.0 for Node.js. With @rekhu/seshat-widget 0.15.0 and Seshat 1.9.5.
+
+- **Findings in the person's language.** The file check routes give each finding's sentence in the locale the page sends (else the browser's `Accept-Language`, else English): English, Dutch, German, French or Arabic, written for the person who sent the file. They come from Seshat's code list (`texts`), so they hold with the explanation off. `fix` takes `locale` for the check of the fixed file.
+
 ## 0.14.0 · 13 November 2026
 
 In parity with @rekhu/core 0.14.0 for Node.js. With @rekhu/seshat-widget 0.14.0 (Seshat protocol 1).
