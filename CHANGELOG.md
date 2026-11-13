@@ -7,6 +7,13 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.11.0 · 13 November 2026
+
+In parity with @rekhu/core 0.11.0 for Node.js. For Seshat 1.9.
+
+- **A heat map of the total ink.** `plates(fileId, …, max_ink)` answers, besides the plates and the proof, a picture of the page with where the total ink is over that limit, and the total ink with spot colours added (`total_ink_all_inks_percent`).
+- **reduce_ink keeps the colour's look.** Seshat now lowers ink by letting black print the grey that cyan, magenta and yellow make together (`method: 'gcr'`, the default), through the file's own print profile; `method: 'lower'` keeps the earlier way. Nothing to change in your code.
+
 ## 0.10.0 · 12 November 2026
 
 In parity with @rekhu/core 0.10.0 for Node.js. For Seshat 1.8.

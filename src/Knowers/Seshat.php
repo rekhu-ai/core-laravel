@@ -66,10 +66,13 @@ class Seshat extends Knower
         return $this->call('fix', array_filter(['file_id' => $fileId, 'fixes' => $fixes, 'order' => (object) $order, 'recipe' => $recipe], fn ($v) => $v !== null));
     }
 
-    /** A page separated: every plate (CMYK and spot colours) with its ink coverage, and a proof with overprint through the profile. */
-    public function plates(string $fileId, int $page = 1, int $dpi = 100, ?string $profile = null): array
+    /**
+     * A page separated: every plate (CMYK and spot colours) with its ink coverage, the total ink, and a proof with overprint
+     * through the profile; with maxInk (%) also a heat map of where the total ink is over it.
+     */
+    public function plates(string $fileId, int $page = 1, int $dpi = 100, ?string $profile = null, ?float $maxInk = null): array
     {
-        return $this->call('plates', array_filter(['file_id' => $fileId, 'page' => $page, 'dpi' => $dpi, 'profile' => $profile]));
+        return $this->call('plates', array_filter(['file_id' => $fileId, 'page' => $page, 'dpi' => $dpi, 'profile' => $profile, 'max_ink' => $maxInk]));
     }
 
     /** What changed from an earlier version to this one: words, areas, colours and fonts, with marked pictures. */

@@ -243,7 +243,7 @@ final class SeshatTest extends TestCase
         $s->saveRecipe('A5 flyer', ['preset' => 'sheetfed_offset', 'width_mm' => 148, 'height_mm' => 210], 'auto');
         $s->fix('f_1', recipe: 'A5 flyer');
         $s->fix('f_1');
-        $s->plates('f_1', 2, profile: 'fogra51');
+        $s->plates('f_1', 2, profile: 'fogra51', maxInk: 300);
         $s->compareFiles('f_2', 'f_1');
         $s->report('f_1', recipe: 'A5 flyer', language: 'nl', texts: ['rgb_colours' => 'Uw bestand bevat RGB.']);
         $s->recipes();
@@ -251,7 +251,7 @@ final class SeshatTest extends TestCase
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/recipe_save') && $r['order']['preset'] === 'sheetfed_offset' && $r['fixes'] === 'auto');
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/fix') && ($r->data()['recipe'] ?? null) === 'A5 flyer' && ! array_key_exists('fixes', $r->data()));
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/fix') && ! array_key_exists('recipe', $r->data()) && ($r->data()['fixes'] ?? null) === 'auto');
-        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/plates') && $r['page'] === 2 && $r['profile'] === 'fogra51');
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/plates') && $r['page'] === 2 && $r['profile'] === 'fogra51' && (float) $r['max_ink'] === 300.0);
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/compare_files') && $r['against_file_id'] === 'f_1');
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/report') && $r['language'] === 'nl' && $r['texts']['rgb_colours'] === 'Uw bestand bevat RGB.');
         Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/recipe_delete') && $r['name'] === 'A5 flyer');
