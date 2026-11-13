@@ -24,7 +24,7 @@ use Rekhu\Core\Knowers\Seshat;
  */
 class Rekhu
 {
-    public const VERSION = '0.13.0';
+    public const VERSION = '0.14.0';
 
     private static ?Closure $tenant = null;
 
@@ -161,6 +161,17 @@ class Rekhu
     public static function seshat(): Seshat
     {
         return new Seshat(app(Client::class));
+    }
+
+    /**
+     * The routes of the file check on your own site (@rekhu/seshat-widget), in your own route file and group, with
+     * options over config('rekhu.seshat'): path, middleware, max_mb, explain, specs, fixes, recipes.
+     *
+     *     Route::prefix('api')->group(fn () => Rekhu::seshatRoutes(['middleware' => ['api', 'auth:sanctum']]));
+     */
+    public static function seshatRoutes(array $options = []): void
+    {
+        Http\SeshatRoutes::register($options);
     }
 
     /** Any knower by its name, for knowers this version has no class for yet. */

@@ -33,6 +33,32 @@ return [
         'seshat' => ['per_day_per_tenant' => null, 'per_day_per_user' => null],
     ],
 
+    // The file check on your own site (@rekhu/seshat-widget): routes that check, fix, preview and download a print file
+    // for the signed-in user (see PROTOCOL.md in the widget). Off until you turn it on, or call Rekhu::seshatRoutes()
+    // in your own route file.
+    'seshat' => [
+        'routes' => (bool) env('REKHU_SESHAT_ROUTES', false),
+        'path' => env('REKHU_SESHAT_PATH', 'rekhu/seshat'),
+        // who may check a file: Blade, Livewire, Inertia: web,auth. An API for Nuxt, Next or mobile: api,auth:sanctum
+        'middleware' => explode(',', env('REKHU_SESHAT_MIDDLEWARE', 'web,auth')),
+        'max_mb' => (int) env('REKHU_SESHAT_MAX_MB', 200),        // the largest file taken; over 20 MB goes on to Rekhu in parts
+        'explain' => (bool) env('REKHU_SESHAT_EXPLAIN', true),    // an explanation for the person who sent the file
+        // your defaults for what the page does not send; null: Seshat's own, from the print standards
+        // (bleed 3 mm, safe zone 3 mm, 250 ppi, 320 % total ink, CMYK)
+        'specs' => [
+            'bleed_mm' => null,
+            'safe_mm' => null,
+            'min_ppi' => null,
+            'max_ink' => null,
+            'colour' => null,
+            'profile' => null,
+        ],
+        // the fixes the page may ask for, by name (add_bleed, convert_cmyk …); null: every fix Seshat decides on
+        'fixes' => null,
+        // the page may name a recipe kept in your Rekhu account (its specs and fixes per product)
+        'recipes' => true,
+    ],
+
     // Every call to a knower is kept in your own table (who, which knower, what Rekhu charged, your own price), and
     // App\Events listeners get Rekhu\Core\Events\KnowerUsed. Turn it off only when you keep usage elsewhere.
     'ledger' => [

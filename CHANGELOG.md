@@ -7,6 +7,14 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.14.0 · 13 November 2026
+
+In parity with @rekhu/core 0.14.0 for Node.js. With @rekhu/seshat-widget 0.14.0 (Seshat protocol 1).
+
+- **The file check on your own site.** With `REKHU_SESHAT_ROUTES=true` the package adds the routes the new widget talks to, as Seshat protocol 1 (`SESHAT-PROTOCOL.md`): check a file against its specs, fix it (all fixes Seshat decided on, or the ones the person chose), the fixed file checked again in the same call, a page as a picture with trim, bleed and safe zone, and the download. It serves the widget itself at `{path}/widget.js`, so a Blade page needs no npm. Or call `Rekhu::seshatRoutes([...])` in your own route file and group.
+- **Its settings**, the `seshat` block in `config/rekhu.php`: `path`, `middleware` (`web,auth`: your login decides who may check a file), `max_mb` (200), `explain`, `specs` (your defaults for what the page does not send), `fixes` (the fixes you allow), `recipes`. Problems with your Rekhu account (key, credit, modules) go to the log, never to the person; your limits a day per user and tenant apply.
+- `Rekhu::seshat()->check()` takes `language`; `fileTo()` saves a kept file with the name and type Rekhu gave it.
+
 ## 0.13.0 · 13 November 2026
 
 In parity with @rekhu/core 0.13.0 for Node.js. For Seshat 1.9.4.

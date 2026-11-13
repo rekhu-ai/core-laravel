@@ -40,9 +40,9 @@ class Seshat extends Knower
      * A print file (an upload, a path, or the bytes with a name) against its order: findings, each with Seshat's
      * decision (fix, ask, refuse, note); explain adds a summary and a text per finding for the customer.
      */
-    public function check(UploadedFile|string $file, array $order = [], bool $explain = false, ?string $name = null, ?string $recipe = null): array
+    public function check(UploadedFile|string $file, array $order = [], bool $explain = false, ?string $name = null, ?string $recipe = null, ?string $language = null): array
     {
-        $input = array_filter(['order' => (object) $order, 'explain' => $explain ?: null, 'recipe' => $recipe]);
+        $input = array_filter(['order' => (object) $order, 'explain' => $explain ?: null, 'recipe' => $recipe, 'language' => $language]);
         if (is_string($file) && preg_match('/^f_[a-z0-9]{24}$/', $file)) {
             return $this->call('check', ['file_id' => $file] + $input);
         }
@@ -289,6 +289,12 @@ class Seshat extends Knower
     public function downloadTo(string $fileId, string $path): string
     {
         return $this->client->downloadTo('seshat', $fileId, $path, $this->user, $this->tenant);
+    }
+
+    /** The same, with the file's name and type as Rekhu gave them: ['path' => …, 'name' => …, 'type' => …]. */
+    public function fileTo(string $fileId, string $path): array
+    {
+        return $this->client->fileTo('seshat', $fileId, $path, $this->user, $this->tenant);
     }
 
     /** A file Rekhu keeps for a day, removed now: a customer took it out of their order. */

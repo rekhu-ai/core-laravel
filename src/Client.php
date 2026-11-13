@@ -97,6 +97,17 @@ class Client
         return $path;
     }
 
+    /** The same, with the file's name and type as Rekhu gave them: for passing a file on to a browser. */
+    public function fileTo(string $knower, string $fileId, string $path, ?Authenticatable $user = null, ?array $tenant = null): array
+    {
+        $response = $this->send(fn () => $this->request($this->filesHeaders($user, $tenant))->withOptions(['sink' => $path])->get("/v1/knowers/{$knower}/files/{$fileId}"));
+        $disposition = (string) $response->header('Content-Disposition');
+        preg_match("/filename\\*=UTF-8''([^;]+)/i", $disposition, $encoded);
+        preg_match('/filename="([^"]+)"/i', $disposition, $plain);
+
+        return ['path' => $path, 'name' => isset($encoded[1]) ? rawurldecode($encoded[1]) : ($plain[1] ?? 'print-file.pdf'), 'type' => $response->header('Content-Type') ?: 'application/octet-stream'];
+    }
+
     /**
      * A font of a knower's font library by its PostScript name (TrueType), with its licence; written to $path when given.
      *

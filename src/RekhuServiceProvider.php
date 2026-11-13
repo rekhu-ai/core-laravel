@@ -22,6 +22,9 @@ class RekhuServiceProvider extends ServiceProvider
         } elseif (collect((array) config('rekhu.limits'))->flatten()->filter(fn ($v) => $v !== null)->isNotEmpty()) {
             Log::warning('Rekhu: limits are set in config/rekhu.php, but they are counted in the usage table and REKHU_LEDGER is off, so they do not apply.');
         }
+        if (config('rekhu.seshat.routes')) {
+            Http\SeshatRoutes::register();
+        }
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/rekhu.php' => config_path('rekhu.php')], 'rekhu-config');
             $this->commands([Console\CoreCommand::class, Console\CheckCommand::class]);

@@ -18,7 +18,7 @@ No Rekhu account yet? [Create one](https://rekhu.com/register?ref=core-laravel):
 
 1. [Connecting](#connecting)
 2. [Tenants, languages, limits and your own prices](#tenants-languages-limits-and-your-own-prices)
-3. [Seshat: print files](#seshat-print-files) · [From the command line](#a-file-from-the-command-line) · [Large files](#large-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
+3. [Seshat: print files](#seshat-print-files) · [From the command line](#a-file-from-the-command-line) · [On your own site](#a-file-check-on-your-own-site) · [Large files](#large-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
 4. [Rekhu Machines](#rekhu-machines)
 5. [Usage per tenant](#usage-per-tenant)
 6. [Where Rekhu runs](#where-rekhu-runs)
@@ -129,6 +129,38 @@ php artisan rekhu:check flyer.pdf --size=148x210 --bleed=3 --fix --out=flyer-rea
 ```
 
 Each finding prints on its own line with Seshat's decision (`fix`, `ask`, `refuse`, `note`) and its pages. The order: `--size` (the trimmed page in mm), `--bleed` (3 by default), `--pages`, `--colour`, `--max-ink`, `--min-ppi`, `--profile`. `--explain` adds the explanation for your customer, `--json` prints the whole answer. A check and its fixes are charged as in your code.
+
+## A file check on your own site
+
+Your customers check their artwork on your own site: they drop the file, see the findings on a proof of each page, ask for the fixes, see the fixed file checked again, and download it. The page uses `@rekhu/seshat-widget`; these are its routes in your app, where the key stays. Turn them on in `.env`:
+
+```dotenv
+REKHU_SESHAT_ROUTES=true
+REKHU_SESHAT_MIDDLEWARE=web,auth        # an API for Nuxt, Next or mobile: api,auth:sanctum
+```
+
+and set your defaults in the `seshat` block of `config/rekhu.php`:
+
+```php
+'seshat' => [
+    'path' => 'rekhu/seshat',
+    'max_mb' => 200,
+    'specs' => ['bleed_mm' => 3, 'min_ppi' => 300],    // null: Seshat's own, from the print standards
+    'fixes' => ['add_bleed', 'convert_cmyk'],          // the fixes the page may ask for; null: all
+    'recipes' => true,
+],
+```
+
+The package serves the widget itself, so a Blade page needs no npm:
+
+```blade
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script src="{{ route('rekhu.seshat.widget') }}"></script>
+<div id="file-check"></div>
+<script>RekhuSeshat.mount('#file-check', { endpoint: '/rekhu/seshat', specs: { width_mm: 148, height_mm: 210 } });</script>
+```
+
+Or register the routes in your own route file and group: `Rekhu::seshatRoutes(['middleware' => ['api', 'auth:sanctum']])`. The routes are Seshat protocol 1 (`SESHAT-PROTOCOL.md` in this package). Each check and fix is kept in your usage table for the user, and your limits a day apply. Problems with your Rekhu account go to the log; the person reads that the check is not available right now.
 
 ## Large files
 
