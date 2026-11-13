@@ -18,7 +18,7 @@ No Rekhu account yet? [Create one](https://rekhu.com/register?ref=core-laravel):
 
 1. [Connecting](#connecting)
 2. [Tenants, languages, limits and your own prices](#tenants-languages-limits-and-your-own-prices)
-3. [Seshat: print files](#seshat-print-files) · [Large files](#large-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
+3. [Seshat: print files](#seshat-print-files) · [From the command line](#a-file-from-the-command-line) · [Large files](#large-files) · [Seshat AI](#seshat-ai-one-picture-improved-ai_enhance)
 4. [Rekhu Machines](#rekhu-machines)
 5. [Usage per tenant](#usage-per-tenant)
 6. [Where Rekhu runs](#where-rekhu-runs)
@@ -118,6 +118,17 @@ New text goes in the file's own font when it has the letters, else the same font
 **What it costs.** `meta.usage` has one line per charged item: the check (`seshat`) and, with `explain`, the explanation (`seshat_explain`, the model call). A refused call, or a fix with nothing to do, costs nothing.
 
 **Everything else, by task:** colour through a print profile, ink, black text, white overprint, spot colours, PDF/X, pages, merge, split, crop marks and pages as pictures are all on [rekhu.com/docs/seshat](https://rekhu.com/docs/seshat), each with what to send, what comes back and one call.
+
+## A file from the command line
+
+Check a file, or make it print-ready, from the terminal:
+
+```bash
+php artisan rekhu:check flyer.pdf --size=148x210 --bleed=3
+php artisan rekhu:check flyer.pdf --size=148x210 --bleed=3 --fix --out=flyer-ready.pdf
+```
+
+Each finding prints on its own line with Seshat's decision (`fix`, `ask`, `refuse`, `note`) and its pages. The order: `--size` (the trimmed page in mm), `--bleed` (3 by default), `--pages`, `--colour`, `--max-ink`, `--min-ppi`, `--profile`. `--explain` adds the explanation for your customer, `--json` prints the whole answer. A check and its fixes are charged as in your code.
 
 ## Large files
 

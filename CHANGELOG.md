@@ -7,6 +7,12 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.13.0 · 13 November 2026
+
+In parity with @rekhu/core 0.13.0 for Node.js. For Seshat 1.9.4.
+
+- A print file checked from the command line, without writing code: `php artisan rekhu:check flyer.pdf --size=148x210 --bleed=3 [--fix --out=flyer-ready.pdf]`. Each finding on its own line with Seshat's decision, the text of its code and its pages; `--fix` saves the print-ready version. The order from `--size`, `--bleed`, `--pages`, `--colour`, `--max-ink`, `--min-ppi` and `--profile`; `--explain` and `--json` as in a call.
+
 ## 0.12.0 · 13 November 2026
 
 In parity with @rekhu/core 0.12.0 for Node.js. For Seshat 1.9.2.

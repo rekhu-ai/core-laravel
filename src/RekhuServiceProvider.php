@@ -24,7 +24,7 @@ class RekhuServiceProvider extends ServiceProvider
         }
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/rekhu.php' => config_path('rekhu.php')], 'rekhu-config');
-            $this->commands([Console\CoreCommand::class]);
+            $this->commands([Console\CoreCommand::class, Console\CheckCommand::class]);
         }
     }
 }
