@@ -14,6 +14,9 @@ return [
     'deployment' => env('REKHU_DEPLOYMENT', 'cloud'),
     'platform' => env('REKHU_PLATFORM', 'https://api.rekhu.ai'),
     'timeout' => (int) env('REKHU_TIMEOUT', 180),             // seconds: a big print file takes a while to check and fix
+    // seconds to wait before each new try when Rekhu cannot be reached (2, 4 and 8: about 14 seconds in all); fewer or
+    // shorter for a screen a user waits on, for example "1" (one try more after a second) or "" (no try more)
+    'retry_waits' => env('REKHU_RETRY_WAITS', '2,4,8'),
 
     // single: the app is one customer of yours. multi: every user belongs to one of your customers (a tenant); name it
     // with Rekhu::tenantUsing(fn ($user) => $user->team) in a service provider.

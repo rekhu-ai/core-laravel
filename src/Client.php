@@ -192,20 +192,30 @@ class Client
 
     /**
      * One call. A dropped connection, or a 502, 503 or 504 without the platform's JSON error (it never reached the
-     * platform), is tried again up to 4 times in all, after 2, 4 and 8 seconds. A busy platform (429, 529, or a 5xx with
+     * platform), is tried again after each wait of rekhu.retry_waits (2, 4 and 8 seconds). A busy platform (429, 529, or a 5xx with
      * overloaded_error or rate_limit_error) is tried again up to 3 times, as long as retry-after asks (up to 5 seconds).
      * Any other failure is the typed exception for it.
      */
+    /** The waits before each new try when Rekhu cannot be reached, in milliseconds (config rekhu.retry_waits, in seconds). */
+    private static function waits(): array
+    {
+        $given = config('rekhu.retry_waits', self::UNREACHED_WAITS);
+        $seconds = is_array($given) ? $given : array_filter(array_map('trim', explode(',', (string) $given)), fn ($v) => $v !== '');
+
+        return array_values(array_map(fn ($v) => (int) round(max(0, (float) $v) * 1000), $seconds));
+    }
+
     private function send(callable $make): Response
     {
         for ($attempt = 1; ; $attempt++) {
             try {
                 $response = $make();
             } catch (ConnectionException) {
-                if ($attempt > count(self::UNREACHED_WAITS)) {
+                $waits = self::waits();
+                if ($attempt > count($waits)) {
                     throw new Unavailable('Rekhu could not be reached; try again in a moment.', 503, 'connection_error');
                 }
-                Sleep::for(self::UNREACHED_WAITS[$attempt - 1])->seconds();
+                Sleep::for($waits[$attempt - 1])->milliseconds();
 
                 continue;
             }
@@ -213,8 +223,8 @@ class Client
                 return $response;
             }
             $fromPlatform = $this->fromPlatform($response);
-            if (in_array($response->status(), self::UNREACHED, true) && ! $fromPlatform && $attempt <= count(self::UNREACHED_WAITS)) {
-                Sleep::for(self::UNREACHED_WAITS[$attempt - 1])->seconds();
+            if (in_array($response->status(), self::UNREACHED, true) && ! $fromPlatform && $attempt <= count(self::waits())) {
+                Sleep::for(self::waits()[$attempt - 1])->milliseconds();
 
                 continue;
             }

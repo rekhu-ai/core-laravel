@@ -7,6 +7,12 @@ All notable changes to `rekhu/core`. Versions follow [semantic versioning](https
 
 
 
+## 0.12.0 · 13 November 2026
+
+In parity with @rekhu/core 0.12.0 for Node.js. For Seshat 1.9.2.
+
+- **The waits before a new try are a setting.** When Rekhu cannot be reached, a call is tried again after 2, 4 and 8 seconds, as before. On a screen a user waits on, set fewer or shorter waits: `REKHU_RETRY_WAITS=1` (seconds), or `rekhu.retry_waits` in the config. An empty list tries once.
+
 ## 0.11.0 · 13 November 2026
 
 In parity with @rekhu/core 0.11.0 for Node.js. For Seshat 1.9.

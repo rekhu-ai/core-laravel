@@ -173,6 +173,27 @@ final class SeshatTest extends TestCase
         Sleep::assertSequence([Sleep::for(2)->seconds(), Sleep::for(4)->seconds(), Sleep::for(8)->seconds()]);
     }
 
+    public function test_the_waits_before_a_new_try_are_a_setting(): void
+    {
+        Sleep::fake();
+        Http::fake(['rekhu.test/v1/knowers/seshat/codes' => Http::response('', 502)]);
+        config(['rekhu.retry_waits' => '0.5']);
+        try {
+            Rekhu::seshat()->for($this->user())->codes();
+            $this->fail('an unreachable platform is not an answer');
+        } catch (Unavailable) {
+        }
+        Http::assertSentCount(2);
+        Sleep::assertSequence([Sleep::for(500)->milliseconds()]);
+
+        config(['rekhu.retry_waits' => '']);
+        try {
+            Rekhu::seshat()->for($this->user())->codes();
+        } catch (Unavailable) {
+        }
+        Http::assertSentCount(3);
+    }
+
     public function test_a_503_with_the_platforms_own_error_fails_at_once(): void
     {
         Sleep::fake();
